@@ -159,19 +159,19 @@ Result: ❌ NO (CORRECT - T4 is not datacenter-class)
 
 ## Files Modified
 
-1. `/Users/hacohen/Desktop/tutorials/mcp-openshift-installer/extract_requirements/feasibility_checker.py`
+1. `/Users/hacohen/Desktop/tutorials/mcp-openshift-installer-checker/extract_requirements/feasibility_checker.py`
    - Added GPU model validation logic (~200 lines)
 
-2. `/Users/hacohen/Desktop/tutorials/mcp-openshift-installer/extract_requirements/cluster_scanner.py`
+2. `/Users/hacohen/Desktop/tutorials/mcp-openshift-installer-checker/extract_requirements/cluster_scanner.py`
    - Enhanced GPU scanning to extract models (~25 lines)
 
-3. `/Users/hacohen/Desktop/tutorials/mcp-openshift-installer/extract_requirements/parser/yaml_parser.py`
+3. `/Users/hacohen/Desktop/tutorials/mcp-openshift-installer-checker/extract_requirements/parser/yaml_parser.py`
    - Added GPU model extraction from nodeSelector (~15 lines)
 
-4. `/Users/hacohen/Desktop/tutorials/mcp-openshift-installer/extract_requirements/models/requirements.py`
+4. `/Users/hacohen/Desktop/tutorials/mcp-openshift-installer-checker/extract_requirements/models/requirements.py`
    - Added `gpu_model` and `gpu_models` fields (~2 lines)
 
-5. `/Users/hacohen/Desktop/tutorials/mcp-openshift-installer/extract_requirements/extractor.py`
+5. `/Users/hacohen/Desktop/tutorials/mcp-openshift-installer-checker/extract_requirements/extractor.py`
    - Enhanced GPU requirement aggregation (~15 lines)
 
 ## Usage

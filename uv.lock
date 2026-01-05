@@ -341,7 +341,7 @@ wheels = [
 ]
 
 [[package]]
-name = "mcp-openshift-installer"
+name = "mcp-openshift-installer-checker"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

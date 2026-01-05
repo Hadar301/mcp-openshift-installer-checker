@@ -2,7 +2,7 @@
 
 An MCP (Model Context Protocol) server that analyzes git repositories to extract application installation requirements and validates them against OpenShift/Kubernetes clusters.
 
-**Repository**: [https://github.com/Hadar301/mcp-openshift-installer](https://github.com/Hadar301/mcp-openshift-installer)
+**Repository**: [https://github.com/Hadar301/mcp-openshift-installer-checker](https://github.com/Hadar301/mcp-openshift-installer-checker)
 
 ## Features
 
@@ -40,8 +40,8 @@ An MCP (Model Context Protocol) server that analyzes git repositories to extract
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/Hadar301/mcp-openshift-installer.git
-cd mcp-openshift-installer
+git clone https://github.com/Hadar301/mcp-openshift-installer-checker.git
+cd mcp-openshift-installer-checker
 ```
 
 2. Install dependencies using `uv`:
@@ -83,8 +83,8 @@ kubectl config use-context <context-name>
 
 First, clone the repository:
 ```bash
-git clone https://github.com/Hadar301/mcp-openshift-installer.git
-cd mcp-openshift-installer
+git clone https://github.com/Hadar301/mcp-openshift-installer-checker.git
+cd mcp-openshift-installer-checker
 uv sync
 ```
 
@@ -95,13 +95,13 @@ Then edit `~/.claude/mcp_config.json`:
     "openshift-installer-checker": {
       "command": "uv",
       "args": ["run", "python", "main.py"],
-      "cwd": "~/path/to/mcp-openshift-installer"
+      "cwd": "~/path/to/mcp-openshift-installer-checker"
     }
   }
 }
 ```
 
-**Note**: Replace `~/path/to/mcp-openshift-installer` with the actual path where you cloned the repository.
+**Note**: Replace `~/path/to/mcp-openshift-installer-checker` with the actual path where you cloned the repository.
 
 Then use Claude Code:
 ```bash
@@ -116,8 +116,8 @@ Ask Claude:
 
 First, clone the repository:
 ```bash
-git clone https://github.com/Hadar301/mcp-openshift-installer.git
-cd mcp-openshift-installer
+git clone https://github.com/Hadar301/mcp-openshift-installer-checker.git
+cd mcp-openshift-installer-checker
 uv sync
 ```
 
@@ -127,12 +127,12 @@ Then in Cursor settings (`Cursor Settings > Features > Model Context Protocol`),
   "openshift-installer-checker": {
     "command": "uv",
     "args": ["run", "python", "main.py"],
-    "cwd": "~/path/to/mcp-openshift-installer"
+    "cwd": "~/path/to/mcp-openshift-installer-checker"
   }
 }
 ```
 
-**Note**: Replace `~/path/to/mcp-openshift-installer` with the actual path where you cloned the repository.
+**Note**: Replace `~/path/to/mcp-openshift-installer-checker` with the actual path where you cloned the repository.
 
 Then ask in Cursor chat: "Analyze installation requirements for https://github.com/your/repo and check if it can be installed"
 
@@ -214,7 +214,7 @@ Returns structured data for Claude/Cursor to analyze and present to user
 ## Project Structure
 
 ```
-mcp-openshift-installer/
+mcp-openshift-installer-checker/
 ├── main.py                                    # MCP server entry point
 ├── .env.example                               # Example environment variables
 ├── extract_requirements/
@@ -491,8 +491,8 @@ Contributions welcome! This project focuses on building practical MCP servers fo
 ### Development Setup
 
 ```bash
-git clone https://github.com/Hadar301/mcp-openshift-installer.git
-cd mcp-openshift-installer
+git clone https://github.com/Hadar301/mcp-openshift-installer-checker.git
+cd mcp-openshift-installer-checker
 uv sync
 ```
 
@@ -524,4 +524,4 @@ MIT
 
 ---
 
-**Repository**: [https://github.com/Hadar301/mcp-openshift-installer](https://github.com/Hadar301/mcp-openshift-installer)
+**Repository**: [https://github.com/Hadar301/mcp-openshift-installer-checker](https://github.com/Hadar301/mcp-openshift-installer-checker)
