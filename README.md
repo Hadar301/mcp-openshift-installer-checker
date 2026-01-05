@@ -483,6 +483,10 @@ If GPU models show as empty:
 - [ ] Support for more git platforms (Bitbucket, Azure DevOps)
 - [ ] Cached results to reduce API calls
 - [ ] Recursive directory scanning for deep nested deployment files
+- [ ] Parallel manifest fetching (ThreadPoolExecutor/asyncio)
+- [ ] Externalize GPU hierarchy/metadata to JSON configuration
+- [ ] Platform version verification (OpenShift/K8s versions)
+- [ ] Resource summation vs. peak requirement analysis
 
 ## Contributing
 
