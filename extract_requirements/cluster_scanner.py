@@ -354,7 +354,6 @@ class ClusterScanner:
 
             # Try to determine owner from labels or annotations
             labels = crd.get("metadata", {}).get("labels", {})
-            annotations = crd.get("metadata", {}).get("annotations", {})
 
             # Common owner indicators
             owner = None

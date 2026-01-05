@@ -168,7 +168,6 @@ class RequirementsExtractor:
 
         for item in parsed_resources:
             resources = item["resources"]
-            file_name = item["file"]
 
             # Aggregate CPU (take maximum)
             if resources.get("cpu_requests"):
