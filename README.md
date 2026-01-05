@@ -519,13 +519,3 @@ PYTHONPATH=. uv run python test/test_gpu_model_validation.py
 ## License
 
 MIT
-
-## Acknowledgments
-
-- Built with [Model Context Protocol](https://modelcontextprotocol.io/)
-- Uses [uv](https://github.com/astral-sh/uv) for dependency management
-- Integrates with [Claude Code](https://claude.ai/) and [Cursor](https://cursor.sh/)
-
----
-
-**Repository**: [https://github.com/Hadar301/mcp-openshift-installer-checker](https://github.com/Hadar301/mcp-openshift-installer-checker)
