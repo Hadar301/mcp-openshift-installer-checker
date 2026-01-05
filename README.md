@@ -487,6 +487,7 @@ If GPU models show as empty:
 - [ ] Externalize GPU hierarchy/metadata to JSON configuration
 - [ ] Platform version verification (OpenShift/K8s versions)
 - [ ] Resource summation vs. peak requirement analysis
+- [ ] Update the repository structure
 
 ## Contributing
 
