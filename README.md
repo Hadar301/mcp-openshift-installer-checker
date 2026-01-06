@@ -17,6 +17,8 @@ An MCP (Model Context Protocol) server that analyzes git repositories to extract
 - **Node Analysis**: Detects CPU, memory, GPU capacity and allocatable resources
 - **Current Usage Tracking**: Monitors real-time resource consumption (via metrics-server)
 - **GPU Model Detection**: Identifies specific GPU models (A100, H100, MI250, etc.) from node labels
+- **GPU Memory Detection**: Extracts GPU VRAM from node labels (e.g., 24GB for A10G, 80GB for A100)
+- **Targeted Scanning**: Optimized scanning that only fetches resources needed for validation (30-50% faster)
 - **Storage Classes**: Lists available storage classes and default configurations
 - **Operator Detection**: Scans for installed operators (OpenShift OLM)
 - **CRD Inventory**: Lists all Custom Resource Definitions in the cluster
@@ -27,6 +29,9 @@ An MCP (Model Context Protocol) server that analyzes git repositories to extract
   - Datacenter-class requirements (A100, H100, H200, MI250, etc.)
   - Specific model matching (e.g., "A100/L4", "H100 or newer")
   - Rejects consumer GPUs (RTX, GTX, T4) for datacenter requirements
+- **GPU Memory Validation**: Validates GPU VRAM requirements (critical for LLM workloads)
+  - Compares required vs available GPU memory (e.g., 24Gi vs 80GB A100)
+  - Clear error messages when GPU memory is insufficient
 - **CRD Conflict Detection**: Checks for CRD name conflicts, API group mismatches, and version compatibility
 - **Available Resource Calculation**: Uses current usage to determine actually available resources
 - **Confidence Scoring**: Provides high/medium/low confidence based on available data
@@ -196,20 +201,24 @@ This opens a web UI where you can test the MCP tools manually.
 
 ### Phase 2: Cluster Scanning (if cluster available)
 1. **CLI Detection**: Tries `oc` first (OpenShift), falls back to `kubectl`
-2. **Node Scanning**: Collects capacity, allocatable resources, and GPU models
-3. **Usage Tracking**: Fetches current resource consumption (requires metrics-server)
-4. **Storage Classes**: Lists available storage provisioners
-5. **Software Inventory**: Scans for installed operators and CRDs
-6. **Available Calculation**: Computes free resources (allocatable - used)
+2. **Targeted Scanning**: Only fetches resources needed based on requirements (performance optimization)
+3. **Node Scanning**: Collects capacity, allocatable resources, GPU models, and GPU memory
+4. **Usage Tracking**: Fetches current resource consumption (requires metrics-server)
+5. **Storage Classes**: Lists available storage provisioners (only if storage required)
+6. **Software Inventory**: Scans for installed operators and CRDs (only if needed)
+7. **Available Calculation**: Computes free resources (allocatable - used)
 
 ### Phase 3: Feasibility Checking
 1. **Resource Validation**: Compares CPU, memory, GPU against cluster capacity
 2. **GPU Model Validation**: Validates GPU class/model requirements
    - Datacenter-class: A100, H100, H200, L4, L40, MI250, MI300, etc.
    - Consumer GPUs rejected: T4, RTX, GTX, Quadro, Titan
-3. **Storage Validation**: Checks for available storage classes
-4. **CRD Conflict Detection**: Identifies potential CRD conflicts
-5. **Confidence Scoring**: Assigns confidence level based on available data
+3. **GPU Memory Validation**: Validates GPU VRAM requirements
+   - Compares required memory (e.g., 24Gi, 80GB) against available GPU memory
+   - Critical for LLM deployments (Llama-70B needs 80GB, DeepSeek-V3 needs 600GB+)
+4. **Storage Validation**: Checks for available storage classes
+5. **CRD Conflict Detection**: Identifies potential CRD conflicts
+6. **Confidence Scoring**: Assigns confidence level based on available data
 
 ### Phase 4: LLM Analysis
 Returns structured data for Claude/Cursor to analyze and present to user
@@ -220,19 +229,24 @@ Returns structured data for Claude/Cursor to analyze and present to user
 mcp-openshift-installer-checker/
 ├── main.py                                    # MCP server entry point
 ├── .env.example                               # Example environment variables
-├── extract_requirements/
-│   ├── extractor.py                          # Main orchestrator
-│   ├── git_handler.py                        # GitHub/GitLab API client
-│   ├── cluster_scanner.py                    # Cluster resource scanner
-│   ├── feasibility_checker.py                # Requirement validation
-│   ├── parser/
-│   │   ├── yaml_parser.py                   # YAML resource extraction
+├── src/
+│   ├── cluster_analyzer/
+│   │   ├── scanner.py                        # Cluster resource scanner (with targeted scanning)
 │   │   └── __init__.py
-│   ├── models/
-│   │   ├── requirements.py                  # Pydantic data models
+│   ├── cluster_checker/
+│   │   ├── feasibility.py                    # Requirement validation (with GPU memory checks)
 │   │   └── __init__.py
-│   └── utils/
-│       └── resource_comparisons.py          # CPU/memory comparison utilities
+│   ├── requirements_extractor/
+│   │   ├── extractor.py                      # Main orchestrator
+│   │   ├── git_handler.py                    # GitHub/GitLab API client
+│   │   ├── parser/
+│   │   │   ├── yaml_parser.py               # YAML resource extraction
+│   │   │   └── __init__.py
+│   │   ├── models/
+│   │   │   ├── requirements.py              # Pydantic data models
+│   │   │   └── __init__.py
+│   │   └── utils/
+│   │       └── resource_comparisons.py      # CPU/memory comparison utilities
 ├── test/
 │   ├── test_crd_detection.py                # CRD conflict detection tests
 │   └── test_gpu_model_validation.py         # GPU model validation tests
@@ -264,7 +278,8 @@ mcp-openshift-installer-checker/
         "cpu_requests": "4",
         "memory_requests": "8Gi",
         "gpu_requests": {"nvidia.com/gpu": "1"},
-        "gpu_model": "A100"
+        "gpu_model": "A100",
+        "gpu_memory": "80Gi"
       }
     }
   ],
@@ -272,7 +287,7 @@ mcp-openshift-installer-checker/
     "hardware": {
       "cpu": "4",
       "memory": "8Gi",
-      "gpu": {"nvidia.com/gpu": "1", "model": "A100"},
+      "gpu": {"nvidia.com/gpu": "1", "model": "A100", "memory": "80Gi"},
       "storage": ["100Gi"]
     },
     "node_requirements": {
@@ -304,6 +319,7 @@ mcp-openshift-installer-checker/
       "total_gpus": 4,
       "gpu_types": {"nvidia.com/gpu": 4},
       "gpu_models": ["NVIDIA-A100-SXM4-40GB"],
+      "gpu_memory_mb": 40960,
       "nodes_with_gpu": ["gpu-node-1", "gpu-node-2"]
     },
     "storage_classes": [
@@ -334,9 +350,9 @@ mcp-openshift-installer-checker/
 }
 ```
 
-## GPU Model Validation
+## GPU Validation
 
-The system validates both GPU **quantity** and **model/class**:
+The system validates GPU **quantity**, **model/class**, and **memory (VRAM)**:
 
 ### Supported Patterns
 
@@ -354,7 +370,12 @@ The system validates both GPU **quantity** and **model/class**:
    - NVIDIA: H200 > H100 > A100/A40 > A30/A10 > V100 > P100 > L40s/L40 > L4
    - AMD: MI300 > MI250 > MI210 > MI100
 
-### Example Validation
+5. **GPU Memory**: `"24Gi"`, `"80GB"`, `"32Gi"`
+   - Validates GPU VRAM against cluster GPU memory
+   - Critical for LLM workloads (Llama-70B needs 80GB, DeepSeek-V3 needs 600GB+)
+   - Clear error messages when insufficient
+
+### Example Model Validation
 
 | Requirement | Available GPU | Result |
 |-------------|---------------|--------|
@@ -362,6 +383,14 @@ The system validates both GPU **quantity** and **model/class**:
 | Datacenter-class | T4 | ❌ FAIL (T4 not datacenter-class) |
 | A100 or newer | H100 | ✅ PASS (H100 newer than A100) |
 | H100/H200/A100 | RTX 4090 | ❌ FAIL (consumer GPU) |
+
+### Example Memory Validation
+
+| Required Memory | Available Memory | Result |
+|----------------|------------------|--------|
+| 16Gi | A10G (24GB) | ✅ PASS |
+| 80Gi | A100-40GB (40GB) | ❌ FAIL (insufficient VRAM) |
+| 32Gi | A100-80GB (80GB) | ✅ PASS |
 
 See [GPU_VALIDATION_SUMMARY.md](GPU_VALIDATION_SUMMARY.md) for detailed documentation.
 
@@ -475,22 +504,27 @@ If GPU models show as empty:
 3. Try running manually: `uv run python main.py`
 4. Use the MCP Inspector to debug: `npx @modelcontextprotocol/inspector uv run python main.py`
 
+## Recent Enhancements
+
+- [x] **GPU Memory Validation**: Validates GPU VRAM requirements (24GB vs 80GB)
+- [x] **Targeted Cluster Scanning**: 30-50% faster by only scanning needed resources
+- [x] **Optimized API Calls**: Eliminated duplicate kubectl/oc calls
+- [x] **Repository Restructure**: Organized into `src/cluster_analyzer/`, `src/cluster_checker/`, `src/requirements_extractor/`
+
 ## Future Enhancements
 
 - [ ] Web scraping for documentation links (e.g., docs.nvidia.com)
 - [ ] Multi-node topology requirements (NVLink, GPU affinity)
-- [ ] GPU memory requirements (40GB vs 80GB A100)
 - [ ] TPU support (Google Cloud TPU v5e, etc.)
 - [ ] Pod distribution analysis across nodes
 - [ ] Network bandwidth requirements
 - [ ] Support for more git platforms (Bitbucket, Azure DevOps)
-- [ ] Cached results to reduce API calls
+- [ ] Cached cluster scan results with TTL (reduce repeated scans)
 - [ ] Recursive directory scanning for deep nested deployment files
 - [ ] Parallel manifest fetching (ThreadPoolExecutor/asyncio)
 - [ ] Externalize GPU hierarchy/metadata to JSON configuration
 - [ ] Platform version verification (OpenShift/K8s versions)
 - [ ] Resource summation vs. peak requirement analysis
-- [ ] Update the repository structure
 
 ## Contributing
 
@@ -516,7 +550,9 @@ PYTHONPATH=. uv run python test/test_gpu_model_validation.py
 
 ### Code Structure
 
-- `extract_requirements/` - Core extraction logic
+- `src/cluster_analyzer/` - Cluster resource scanning with targeted optimization
+- `src/cluster_checker/` - Feasibility validation with GPU memory checks
+- `src/requirements_extractor/` - Repository analysis and requirement extraction
 - `test/` - Test scripts
 - `main.py` - MCP server entry point
 
