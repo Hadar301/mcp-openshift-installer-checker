@@ -67,6 +67,8 @@ def scan_cluster() -> dict:
     """
     Scan the connected OpenShift/Kubernetes cluster for available resources.
 
+    This performs a FULL cluster scan, returning all available resources.
+
     USE THIS TOOL WHEN:
     - User asks "what resources are available in my cluster?"
     - User asks "what does my cluster have?"
@@ -76,8 +78,14 @@ def scan_cluster() -> dict:
     DO NOT USE when user asks about installing/deploying an app (use check_feasibility instead)
     DO NOT USE when user asks about app requirements (use fetch_repo_content instead)
 
-    Returns cluster version, node info, available CPU/memory/GPU, installed
-    operators, and CRDs. Fails with clear error if cluster is not accessible.
+    Returns comprehensive cluster information including:
+    - Node resources (CPU, memory, allocatable, available, usage)
+    - GPU availability, models, and memory (VRAM)
+    - Storage classes
+    - Installed operators (OpenShift only)
+    - Custom Resource Definitions (CRDs)
+
+    Fails with clear error if cluster is not accessible.
 
     Returns:
         Dictionary containing:
@@ -91,7 +99,11 @@ def scan_cluster() -> dict:
             "success": True,
             "cluster_info": {
                 "nodes": {...},
-                "gpu_resources": {...},
+                "gpu_resources": {
+                    "total_gpus": 4,
+                    "gpu_models": ["NVIDIA-A10G"],
+                    "gpu_memory_mb": 23028
+                },
                 "storage_classes": [...],
                 "operators": [...],
                 "crds": [...]
@@ -154,6 +166,7 @@ def check_feasibility(repo_url: str) -> dict:
         - cluster_info: Cluster resource information (if cluster is available)
         - feasibility_check: Detailed feasibility analysis (if cluster is available)
         - instructions_for_llm: Guidance for the LLM on how to analyze the data
+        - final decision: Bool are all the requirements for hardware software and drivers met by the cluster? 
 
     Example:
         >>> check_feasibility("https://github.com/kubernetes/kubernetes")

@@ -193,6 +193,17 @@ class YAMLParser:
                         result.gpu_requests = {}
                     result.gpu_requests[gpu_key] = str(requests[gpu_key])
 
+            # Extended resources (RDMA, FPGA, etc.) - anything with "/" or "." that's not GPU/CPU/memory
+            for key, value in requests.items():
+                # Skip standard resources and GPUs we already handled
+                if key in ["cpu", "memory", "nvidia.com/gpu", "amd.com/gpu", "gpu"]:
+                    continue
+                # Extended resources typically have "/" or "." in the name
+                if "/" in key or "." in key:
+                    if result.extended_resources is None:
+                        result.extended_resources = {}
+                    result.extended_resources[key] = str(value)
+
         # Extract limits
         limits = resources.get("limits", {})
         if isinstance(limits, dict):
@@ -207,6 +218,17 @@ class YAMLParser:
                     if result.gpu_requests is None:
                         result.gpu_requests = {}
                     result.gpu_requests[gpu_key] = str(limits[gpu_key])
+
+            # Extended resources from limits
+            for key, value in limits.items():
+                if key in ["cpu", "memory", "nvidia.com/gpu", "amd.com/gpu", "gpu"]:
+                    continue
+                if "/" in key or "." in key:
+                    if result.extended_resources is None:
+                        result.extended_resources = {}
+                    # Only set if not already set from requests
+                    if key not in result.extended_resources:
+                        result.extended_resources[key] = str(value)
 
     def _extract_storage_requirements(
         self, persistence: Dict[str, Any], result: ParsedYAMLResources

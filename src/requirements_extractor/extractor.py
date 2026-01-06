@@ -105,7 +105,8 @@ class RequirementsExtractor:
                 scanner = ClusterScanner()
 
                 if scanner.is_cluster_available():
-                    cluster_data = scanner.scan_cluster()
+                    # Use targeted scan with yaml_summary requirements (OPTIMIZED)
+                    cluster_data = scanner.scan_cluster_targeted(yaml_summary)
 
                     if cluster_data:
                         cluster_info = cluster_data
@@ -161,7 +162,9 @@ class RequirementsExtractor:
         max_cpu_requests = None
         max_memory_requests = None
         all_gpu_requests = {}
-        gpu_model_requirement = None  # NEW: Track GPU model requirement
+        gpu_model_requirement = None  # Track GPU model requirement
+        gpu_memory_requirement = None  # Track GPU memory requirement
+        all_extended_resources = {}  # NEW: Track extended resources (RDMA, FPGA, etc.)
         all_storage_requests = []
         all_node_selectors = {}
         all_software_requirements = set()
@@ -188,9 +191,17 @@ class RequirementsExtractor:
             if resources.get("gpu_requests"):
                 all_gpu_requests.update(resources["gpu_requests"])
 
-            # Aggregate GPU model requirement (NEW)
+            # Aggregate GPU model requirement
             if resources.get("gpu_model"):
                 gpu_model_requirement = resources["gpu_model"]
+
+            # Aggregate GPU memory requirement
+            if resources.get("gpu_memory"):
+                gpu_memory_requirement = resources["gpu_memory"]
+
+            # Aggregate extended resources (RDMA, FPGA, etc.)
+            if resources.get("extended_resources"):
+                all_extended_resources.update(resources["extended_resources"])
 
             # Aggregate storage (sum all)
             if resources.get("storage_requests"):
@@ -208,18 +219,21 @@ class RequirementsExtractor:
                             "NVIDIA GPU Operator (inferred from nodeSelector)"
                         )
 
-        # Build GPU requirements with model if specified
+        # Build GPU requirements with model and memory if specified
         gpu_requirements = None
         if all_gpu_requests:
             gpu_requirements = all_gpu_requests.copy()
             if gpu_model_requirement:
                 gpu_requirements["model"] = gpu_model_requirement
+            if gpu_memory_requirement:
+                gpu_requirements["memory"] = gpu_memory_requirement
 
         return {
             "hardware": {
                 "cpu": max_cpu_requests,
                 "memory": max_memory_requests,
                 "gpu": gpu_requirements,
+                "extended_resources": all_extended_resources if all_extended_resources else None,
                 "storage": all_storage_requests if all_storage_requests else None,
             },
             "node_requirements": {

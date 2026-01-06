@@ -98,6 +98,8 @@ class ParsedYAMLResources(BaseModel):
     memory_limits: Optional[str] = None
     gpu_requests: Optional[Dict[str, str]] = None
     gpu_model: Optional[str] = None  # NEW: GPU model/class requirement (e.g., "A100", "datacenter-class")
+    gpu_memory: Optional[str] = None  # NEW: GPU memory requirement (e.g., "24Gi", "16000Mi")
+    extended_resources: Optional[Dict[str, str]] = None  # NEW: Extended resources (RDMA, FPGA, etc.)
     storage_requests: List[str] = Field(default_factory=list)
     node_selector: Optional[Dict[str, str]] = None
     tolerations: List[str] = Field(default_factory=list)

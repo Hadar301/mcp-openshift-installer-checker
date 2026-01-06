@@ -66,6 +66,15 @@ class FeasibilityChecker:
             else:
                 reasons_fail.append(msg)
 
+        # Check Extended Resources (RDMA, FPGAs, etc.)
+        if hardware.get('extended_resources'):
+            for resource_type, required_count in hardware['extended_resources'].items():
+                ext_ok, ext_msg = self._check_extended_resource(resource_type, required_count, cluster_info)
+                if ext_ok:
+                    reasons_pass.append(ext_msg)
+                else:
+                    reasons_fail.append(ext_msg)
+
         # Check Storage
         if hardware.get('storage'):
             storage_ok, storage_msgs = self._check_storage(hardware['storage'], cluster_info)
@@ -209,8 +218,8 @@ class FeasibilityChecker:
 
         # Check each GPU type requirement
         for gpu_type, required_count in required.items():
-            # Skip 'model' key - it's metadata, not a resource type
-            if gpu_type == 'model':
+            # Skip 'model' and 'memory' keys - they're metadata, not resource types
+            if gpu_type in ['model', 'memory']:
                 continue
 
             try:
@@ -232,7 +241,50 @@ class FeasibilityChecker:
             model_ok, model_msg = self._check_gpu_model(required_model, available_models)
             if not model_ok:
                 return False, model_msg
+
+            # Check GPU memory if both model and memory are specified
+            required_memory = required.get('memory')
+            if required_memory:
+                cluster_gpu_memory_mb = gpu_info.get('gpu_memory_mb')
+
+                if cluster_gpu_memory_mb:
+                    # Convert required memory to MB
+                    from src.requirements_extractor.utils.resource_comparisons import memory_to_bytes
+                    required_memory_bytes = memory_to_bytes(required_memory)
+                    required_memory_mb = required_memory_bytes / (1024 * 1024)
+
+                    if cluster_gpu_memory_mb < required_memory_mb:
+                        return False, (
+                            f"GPU Memory: Insufficient - Requires {required_memory} "
+                            f"({required_memory_mb:.0f}MB), cluster GPUs have {cluster_gpu_memory_mb}MB"
+                        )
+
+                    return True, (
+                        f"GPU: Cluster has {total_available} compatible GPU(s) with "
+                        f"{cluster_gpu_memory_mb}MB memory - {model_msg}"
+                    )
+                # If GPU memory info not available, just warn (don't fail)
+                # This will be added as a warning in the main check_feasibility method
+
             return True, f"GPU: Cluster has {total_available} compatible GPU(s) - {model_msg}"
+
+        # Check GPU memory even without model requirement
+        required_memory = required.get('memory')
+        if required_memory:
+            cluster_gpu_memory_mb = gpu_info.get('gpu_memory_mb')
+
+            if cluster_gpu_memory_mb:
+                from src.requirements_extractor.utils.resource_comparisons import memory_to_bytes
+                required_memory_bytes = memory_to_bytes(required_memory)
+                required_memory_mb = required_memory_bytes / (1024 * 1024)
+
+                if cluster_gpu_memory_mb < required_memory_mb:
+                    return False, (
+                        f"GPU Memory: Insufficient - Requires {required_memory} "
+                        f"({required_memory_mb:.0f}MB), cluster GPUs have {cluster_gpu_memory_mb}MB"
+                    )
+
+                return True, f"GPU: Cluster has {total_available} GPU(s) with {cluster_gpu_memory_mb}MB memory"
 
         return True, f"GPU: Cluster has sufficient GPU resources ({total_available} total)"
 
@@ -383,6 +435,36 @@ class FeasibilityChecker:
 
         # If we can't determine, be conservative
         return False
+
+    def _check_extended_resource(self, resource_type: str, required_count: str, cluster: Dict) -> Tuple[bool, str]:
+        """
+        Check if extended resources (RDMA, FPGA, etc.) are available.
+
+        Args:
+            resource_type: Resource type (e.g., "rdma/ib", "rdma/roce", "xilinx.com/fpga")
+            required_count: Required count as string
+            cluster: Cluster info with nodes
+
+        Returns:
+            (is_sufficient, message)
+        """
+        nodes_info = cluster.get('nodes', {})
+
+        # Try to get extended resources from nodes
+        # Extended resources are stored in allocatable_resources or similar
+        extended_resources = nodes_info.get('extended_resources', {})
+
+        try:
+            required_count_int = int(required_count)
+        except (ValueError, TypeError):
+            required_count_int = 1
+
+        available_count = extended_resources.get(resource_type, 0)
+
+        if available_count >= required_count_int:
+            return True, f"Extended Resource ({resource_type}): Cluster has {available_count}, requires {required_count_int}"
+        else:
+            return False, f"Extended Resource ({resource_type}): Insufficient - Cluster has {available_count}, requires {required_count_int}"
 
     def _check_storage(self, required: List[str], cluster: Dict) -> Tuple[bool, List[str]]:
         """

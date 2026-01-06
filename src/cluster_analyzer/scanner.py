@@ -123,9 +123,12 @@ class ClusterScanner:
 
         logger.info("Scanning cluster resources...")
 
-        # Scan all cluster components
-        nodes_info = self._scan_nodes()
-        gpu_info = self._scan_gpu_resources()
+        # Fetch nodes data once for reuse
+        nodes_data_raw = self._run_command(["get", "nodes", "-o", "json"])
+
+        # Scan all cluster components (reusing nodes_data where possible)
+        nodes_info = self._scan_nodes()  # Note: _scan_nodes() fetches its own data currently
+        gpu_info = self._scan_gpu_resources(nodes_data_raw)  # Reuse nodes data
         storage_classes = self._scan_storage_classes()
         operators = self._scan_installed_operators()
         crds = self._scan_crds()
@@ -150,6 +153,105 @@ class ClusterScanner:
             "crds": crds,
             "cli_tool": self._cli_tool,
         }
+
+    def scan_cluster_targeted(self, requirements: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Targeted cluster scan: Only fetch resources needed to validate requirements.
+
+        Args:
+            requirements: Requirements dict from yaml_extracted_requirements
+                         Expected structure:
+                         {
+                           "hardware": {
+                             "cpu": "4",
+                             "memory": "16Gi",
+                             "gpu": {"nvidia.com/gpu": "1", "model": "A100"},
+                             "extended_resources": {"rdma/ib": "1"},
+                             "storage": ["100Gi"]
+                           },
+                           "software_inferred": [...],
+                           "required_crds": [...]
+                         }
+
+        Returns:
+            Dict with only requested resource types, or None if cluster unavailable
+        """
+        if not self.is_cluster_available():
+            logger.info("Cluster not available - skipping cluster scan")
+            return None
+
+        logger.info("Performing targeted cluster scan based on requirements...")
+
+        hardware = requirements.get('hardware', {})
+        result = {}
+
+        # Check if we have ANY requirements at all
+        has_any_requirements = (
+            hardware.get('cpu') or
+            hardware.get('memory') or
+            hardware.get('gpu') or
+            hardware.get('extended_resources') or
+            hardware.get('storage') or
+            requirements.get('software_inferred') or
+            requirements.get('required_crds')
+        )
+
+        # If NO requirements found (e.g., YAML parsing failed), do basic scan
+        # This ensures we always return at least nodes + GPUs for LLM analysis
+        if not has_any_requirements:
+            logger.info("No requirements found - performing basic cluster scan (nodes + GPUs)")
+            nodes_data_raw = self._run_command(["get", "nodes", "-o", "json"])
+            result["nodes"] = self._scan_nodes()
+            result["gpu_resources"] = self._scan_gpu_resources(nodes_data_raw)
+            result["cli_tool"] = self._cli_tool
+            return result
+
+        # Always scan nodes if ANY hardware requirement exists
+        needs_nodes = (
+            hardware.get('cpu') or
+            hardware.get('memory') or
+            hardware.get('gpu') or
+            hardware.get('extended_resources')
+        )
+
+        # Fetch nodes data once if needed (for both nodes and GPU scanning)
+        nodes_data_raw = None
+        if needs_nodes or hardware.get('gpu'):
+            nodes_data_raw = self._run_command(["get", "nodes", "-o", "json"])
+
+        if needs_nodes:
+            nodes_info = self._scan_nodes()  # Note: currently fetches its own data
+
+            # Only fetch usage if we need accurate availability
+            if hardware.get('cpu') or hardware.get('memory'):
+                usage_info = self._scan_resource_usage()
+                available_info = self._calculate_available_resources(nodes_info, usage_info)
+                nodes_info.update(available_info)
+                nodes_info["resource_usage"] = usage_info
+
+            result["nodes"] = nodes_info
+
+        # Scan GPUs only if GPU requirement exists (reuse nodes_data)
+        if hardware.get('gpu'):
+            result["gpu_resources"] = self._scan_gpu_resources(nodes_data_raw)
+
+        # Scan storage only if storage requirement exists
+        if hardware.get('storage'):
+            result["storage_classes"] = self._scan_storage_classes()
+
+        # Scan operators/CRDs only if software or CRD requirements exist
+        software_reqs = requirements.get('software_inferred', [])
+        crd_reqs = requirements.get('required_crds', [])
+
+        if software_reqs:
+            result["operators"] = self._scan_installed_operators()
+
+        if crd_reqs:
+            result["crds"] = self._scan_crds()
+
+        result["cli_tool"] = self._cli_tool
+
+        return result
 
     def _scan_nodes(self) -> Dict[str, Any]:
         """
@@ -252,21 +354,28 @@ class ClusterScanner:
 
         return storage_classes
 
-    def _scan_gpu_resources(self) -> Dict[str, Any]:
+    def _scan_gpu_resources(self, nodes_data: Optional[Dict] = None) -> Dict[str, Any]:
         """
         Scan for GPU availability across all nodes with model detection.
+
+        Args:
+            nodes_data: Optional pre-fetched nodes data to avoid duplicate API call
 
         Returns:
             Dictionary with GPU information including models
         """
-        nodes_data = self._run_command(["get", "nodes", "-o", "json"])
+        # Reuse nodes_data if provided, otherwise fetch
+        if nodes_data is None:
+            nodes_data = self._run_command(["get", "nodes", "-o", "json"])
+
         if not nodes_data:
-            return {"total_gpus": 0, "gpu_types": {}, "gpu_models": [], "nodes_with_gpu": []}
+            return {"total_gpus": 0, "gpu_types": {}, "gpu_models": [], "gpu_memory_mb": None, "nodes_with_gpu": []}
 
         total_gpus = 0
         gpu_types = {}
         nodes_with_gpu = []
         gpu_models = []
+        gpu_memory = None  # NEW: Track GPU memory in MB
 
         for node in nodes_data.get("items", []):
             capacity = node["status"]["capacity"]
@@ -299,10 +408,20 @@ class ClusterScanner:
                         if gpu_model and gpu_model not in gpu_models:
                             gpu_models.append(gpu_model)
 
+                        # Extract GPU memory in MB (NEW)
+                        if gpu_key == "nvidia.com/gpu":
+                            gpu_memory_str = labels.get("nvidia.com/gpu.memory")
+                            if gpu_memory_str and gpu_memory is None:
+                                try:
+                                    gpu_memory = int(gpu_memory_str)  # Memory in MB
+                                except ValueError:
+                                    pass
+
         return {
             "total_gpus": total_gpus,
             "gpu_types": gpu_types,
             "gpu_models": gpu_models,
+            "gpu_memory_mb": gpu_memory,  # NEW: Memory of first GPU found (in MB)
             "nodes_with_gpu": nodes_with_gpu,
         }
 
