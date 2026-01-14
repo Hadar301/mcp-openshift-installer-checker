@@ -6,6 +6,7 @@ about node capacity, storage classes, GPU availability, operators, and CRDs.
 """
 
 import json
+import re
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional
@@ -42,7 +43,8 @@ class ClusterScanner:
         for tool in ["oc", "kubectl"]:
             try:
                 result = subprocess.run(
-                    [tool, "version", "--client"], capture_output=True, timeout=5, text=True
+                    [tool, "version", "--client"], capture_output=True, timeout=5, text=True,
+                    shell=False  # Explicitly set shell=False for safety
                 )
                 if result.returncode == 0:
                     self._cli_tool = tool
@@ -53,6 +55,138 @@ class ClusterScanner:
 
         self._cli_tool = None
         logger.info("No cluster CLI tool (oc/kubectl) detected")
+
+    def _validate_command_args(self, args: List[str]) -> bool:
+        """
+        Validate command arguments to prevent command injection.
+        
+        Args:
+            args: List of command arguments to validate
+            
+        Returns:
+            True if arguments are safe, False otherwise
+        """
+        # Define allowed commands and their valid arguments
+        allowed_commands = {
+            'get': {
+                'valid_resources': {
+                    'nodes', 'storageclass', 'crd', 'clusterserviceversion',
+                    'pods', 'services', 'deployments', 'configmaps', 'secrets'
+                },
+                'valid_flags': {'-o', '-A', '--no-headers', '-n', '--namespace', '-l', '--selector'}
+            },
+            'top': {
+                'valid_resources': {'nodes'},
+                'valid_flags': {'--no-headers'}
+            },
+            'adm': {
+                'valid_subcommands': {'top'},
+                'valid_flags': {'--no-headers'}
+            },
+            'cluster-info': {
+                'valid_flags': set()
+            },
+            'version': {
+                'valid_flags': {'--client', '--short'}
+            }
+        }
+        
+        if not args:
+            return False
+        
+        # Type safety: ensure all args are strings
+        if not all(isinstance(arg, str) for arg in args):
+            logger.error("All command arguments must be strings")
+            return False
+            
+        # Check for dangerous patterns
+        dangerous_patterns = [
+            r'[;&|`$()]',  # Command separators and special chars
+            r'\$\(',       # Command substitution
+            r'`[^`]*`',    # Backtick execution
+            r'\.\.',       # Directory traversal
+            r'\s',         # Spaces (could indicate multiple commands)
+        ]
+        
+        for arg in args:
+            for pattern in dangerous_patterns:
+                if re.search(pattern, arg):
+                    logger.error(f"Dangerous pattern detected in argument: {arg}")
+                    return False
+        
+        # Validate specific command structure
+        if args[0] in allowed_commands:
+            cmd_config = allowed_commands[args[0]]
+            
+            # For 'get' command, validate resource and flags
+            if args[0] == 'get':
+                if len(args) < 2:
+                    return False
+                    
+                resource = args[1]
+                if resource not in cmd_config['valid_resources']:
+                    logger.error(f"Invalid resource for get command: {resource}")
+                    return False
+                
+                # Validate remaining arguments are flags
+                i = 2
+                while i < len(args):
+                    arg = args[i]
+                    if arg.startswith('-'):
+                        flag_name = arg.split('=')[0]
+                        if flag_name not in cmd_config['valid_flags']:
+                            logger.error(f"Invalid flag for get command: {flag_name}")
+                            return False
+                        
+                        # Special handling for flags that take values
+                        if flag_name in ['-l', '--selector', '-n', '--namespace'] and i + 1 < len(args):
+                            # Allow safe characters in selector values (key=value format)
+                            selector_value = args[i + 1]
+                            if not re.match(r'^[a-zA-Z0-9._/=-]+$', selector_value):
+                                logger.error(f"Invalid selector value: {selector_value}")
+                                return False
+                            i += 2  # Skip the value
+                        elif flag_name in ['-o'] and i + 1 < len(args):
+                            # Allow safe characters in output format
+                            output_value = args[i + 1]
+                            if not re.match(r'^[a-zA-Z0-9._=]+$', output_value):
+                                logger.error(f"Invalid output format: {output_value}")
+                                return False
+                            i += 2  # Skip the value
+                        else:
+                            i += 1
+                    else:
+                        # Non-flag arguments (like resource names) should be safe
+                        if not re.match(r'^[a-zA-Z0-9._-]+$', arg):
+                            logger.error(f"Invalid resource name: {arg}")
+                            return False
+                        i += 1
+            
+            # For 'top' command
+            elif args[0] == 'top':
+                if len(args) < 2:
+                    return False
+                if args[1] not in cmd_config['valid_resources']:
+                    return False
+                for arg in args[2:]:
+                    if arg.startswith('-') and arg not in cmd_config['valid_flags']:
+                        return False
+            
+            # For 'adm' command (OpenShift specific)
+            elif args[0] == 'adm':
+                if len(args) < 2 or args[1] not in cmd_config['valid_subcommands']:
+                    return False
+                for arg in args[2:]:
+                    if arg.startswith('-') and arg not in cmd_config['valid_flags']:
+                        return False
+            
+            # For simple commands like 'cluster-info', 'version'
+            else:
+                for arg in args[1:]:
+                    if arg.startswith('-') and arg not in cmd_config['valid_flags']:
+                        return False
+        
+        return True
 
     def _run_command(self, args: List[str], timeout: int = 10) -> Optional[Dict]:
         """
@@ -68,13 +202,28 @@ class ClusterScanner:
         if not self._cli_tool:
             return None
 
+        # Validate arguments to prevent command injection
+        if not self._validate_command_args(args):
+            logger.error(f"Invalid command arguments detected: {args}")
+            return None
+
         try:
+            # Use subprocess.run with proper argument list (no shell=True)
+            # This ensures each argument is passed as a separate string
+            cmd = [self._cli_tool] + args
+            logger.debug(f"Executing command: {' '.join(cmd)}")
+            
             result = subprocess.run(
-                [self._cli_tool] + args, capture_output=True, timeout=timeout, text=True
+                cmd, 
+                capture_output=True, 
+                timeout=timeout, 
+                text=True,
+                # Never use shell=True to prevent injection
+                shell=False
             )
 
             if result.returncode != 0:
-                logger.info(f"Command failed: {' '.join([self._cli_tool] + args)}")
+                logger.info(f"Command failed: {' '.join(cmd)}")
                 if result.stderr:
                     logger.info(f"Error: {result.stderr}")
                 return None
@@ -102,9 +251,13 @@ class ClusterScanner:
             return False
 
         # Try a simple command that should always work if connected
+        if not self._validate_command_args(["cluster-info"]):
+            return False
+            
         try:
             result = subprocess.run(
-                [self._cli_tool, "cluster-info"], capture_output=True, timeout=5, text=True
+                [self._cli_tool, "cluster-info"], capture_output=True, timeout=5, text=True,
+                shell=False  # Explicitly set shell=False for safety
             )
             return result.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
@@ -508,9 +661,15 @@ class ClusterScanner:
         else:
             cmd = ["top", "nodes", "--no-headers"]
 
+        # Validate command args first
+        if not self._validate_command_args(cmd):
+            logger.error(f"Invalid command arguments for resource usage: {cmd}")
+            return {"available": False, "reason": "Invalid command arguments"}
+            
         try:
             result = subprocess.run(
-                [self._cli_tool] + cmd, capture_output=True, timeout=10, text=True
+                [self._cli_tool] + cmd, capture_output=True, timeout=10, text=True,
+                shell=False  # Explicitly set shell=False for safety
             )
 
             if result.returncode != 0:
