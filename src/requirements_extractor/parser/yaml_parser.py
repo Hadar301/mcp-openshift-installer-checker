@@ -2,8 +2,9 @@
 YAML Parser - Extracts resource requirements from Kubernetes/Helm YAML files.
 """
 
+import re
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from loguru import logger
@@ -17,38 +18,139 @@ logger.add(sys.stderr, level="INFO")
 class YAMLParser:
     """Parses Kubernetes and Helm YAML files to extract resource requirements."""
 
-    def parse_yaml_content(self, content: str, file_path: str) -> ParsedYAMLResources:
+    # Pattern to detect Helm templating
+    HELM_TEMPLATE_PATTERN = re.compile(r'\{\{.*?\}\}', re.DOTALL)
+
+    # Pattern to extract .Values references
+    VALUES_REF_PATTERN = re.compile(r'\{\{\s*\.Values\.([a-zA-Z0-9_.]+)\s*\}\}')
+
+    def _detect_helm_templating(self, content: str) -> bool:
+        """
+        Check if content contains unresolved Helm templating.
+
+        Args:
+            content: YAML file content
+
+        Returns:
+            True if Helm templating syntax is detected
+        """
+        return bool(self.HELM_TEMPLATE_PATTERN.search(content))
+
+    def _extract_values_references(self, content: str) -> List[str]:
+        """
+        Extract all .Values references from Helm template.
+
+        Args:
+            content: YAML file content with Helm templating
+
+        Returns:
+            List of value paths (e.g., ['resources.limits.gpu', 'replicas'])
+        """
+        matches = self.VALUES_REF_PATTERN.findall(content)
+        return list(set(matches))
+
+    def _get_nested_value(self, values: Dict, path: str) -> Optional[Any]:
+        """
+        Get a nested value from a dictionary using dot notation.
+
+        Args:
+            values: Dictionary to search (e.g., from values.yaml)
+            path: Dot-separated path (e.g., 'resources.limits.gpu')
+
+        Returns:
+            Value at path or None if not found
+        """
+        parts = path.split('.')
+        current = values
+
+        for part in parts:
+            if not isinstance(current, dict):
+                return None
+            current = current.get(part)
+            if current is None:
+                return None
+
+        return current
+
+    def _resolve_simple_template(self, content: str, values: Dict) -> str:
+        """
+        Resolve simple Helm template variables using values.
+
+        Only handles simple {{ .Values.x.y.z }} patterns.
+        Complex templates with conditionals/loops are left as-is.
+
+        Args:
+            content: Template content
+            values: Values dictionary from values.yaml
+
+        Returns:
+            Content with resolved values where possible
+        """
+        def replace_value(match):
+            path = match.group(1)
+            value = self._get_nested_value(values, path)
+            if value is not None:
+                # Convert to YAML-safe string
+                if isinstance(value, (dict, list)):
+                    return yaml.dump(value, default_flow_style=True).strip()
+                return str(value)
+            return match.group(0)  # Return original if not found
+
+        return self.VALUES_REF_PATTERN.sub(replace_value, content)
+
+    def parse_yaml_content(
+        self, content: str, file_path: str, values: Optional[Dict] = None
+    ) -> ParsedYAMLResources:
         """
         Parse YAML content and extract resource requirements.
 
         Args:
             content: YAML file content as string
             file_path: File path (used to determine parsing strategy)
+            values: Optional values dictionary from values.yaml for template resolution
 
         Returns:
             ParsedYAMLResources object with extracted requirements
         """
+        # Detect Helm templating
+        has_templating = self._detect_helm_templating(content)
+        resolved_content = content
+
+        # Try to resolve templating if values are provided
+        if has_templating and values:
+            resolved_content = self._resolve_simple_template(content, values)
+            # Check if any templating remains unresolved
+            has_templating = self._detect_helm_templating(resolved_content)
+            if has_templating:
+                logger.info(f"Some Helm templating in {file_path} could not be resolved")
+
         try:
             # Try to parse as YAML (may contain multiple documents)
-            documents = list(yaml.safe_load_all(content))
+            documents = list(yaml.safe_load_all(resolved_content))
 
             # Determine file type and parse accordingly
             if "values.yaml" in file_path.lower():
-                return self._parse_helm_values(documents)
+                result = self._parse_helm_values(documents)
             elif any(
                 keyword in file_path.lower()
                 for keyword in ["deployment", "statefulset", "daemonset"]
             ):
-                return self._parse_k8s_workload(documents)
+                result = self._parse_k8s_workload(documents)
             elif "configmap" in file_path.lower():
-                return self._parse_configmap(documents)
+                result = self._parse_configmap(documents)
             else:
                 # Generic Kubernetes manifest parsing
-                return self._parse_k8s_manifest(documents)
+                result = self._parse_k8s_manifest(documents)
+
+            # Set the templating flag
+            result.has_unresolved_templating = has_templating
+            return result
 
         except yaml.YAMLError as e:
             logger.info(f"Warning: Could not parse YAML in {file_path}: {e}")
-            return ParsedYAMLResources()
+            result = ParsedYAMLResources()
+            result.has_unresolved_templating = has_templating
+            return result
 
     def _parse_helm_values(self, documents: List[Dict[str, Any]]) -> ParsedYAMLResources:
         """Parse Helm values.yaml file."""

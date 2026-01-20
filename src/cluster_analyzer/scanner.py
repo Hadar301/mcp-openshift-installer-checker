@@ -367,10 +367,8 @@ class ClusterScanner:
             hardware.get('extended_resources')
         )
 
-        # Fetch nodes data once if needed (for both nodes and GPU scanning)
-        nodes_data_raw = None
-        if needs_nodes or hardware.get('gpu'):
-            nodes_data_raw = self._run_command(["get", "nodes", "-o", "json"])
+        # Always fetch nodes data (needed for GPU scanning which we always do)
+        nodes_data_raw = self._run_command(["get", "nodes", "-o", "json"])
 
         if needs_nodes:
             nodes_info = self._scan_nodes()  # Note: currently fetches its own data
@@ -384,9 +382,8 @@ class ClusterScanner:
 
             result["nodes"] = nodes_info
 
-        # Scan GPUs only if GPU requirement exists (reuse nodes_data)
-        if hardware.get('gpu'):
-            result["gpu_resources"] = self._scan_gpu_resources(nodes_data_raw)
+        # Always scan GPUs - ML workloads commonly need them and scanning is fast
+        result["gpu_resources"] = self._scan_gpu_resources(nodes_data_raw)
 
         # Scan storage only if storage requirement exists
         if hardware.get('storage'):

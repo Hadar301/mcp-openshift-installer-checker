@@ -24,6 +24,65 @@ load_dotenv()
 class RequirementsExtractor:
     """Main orchestrator for extracting application requirements from git repositories."""
 
+    def _group_files_by_helm_chart(
+        self, deployment_files: List[Dict[str, str]]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Group deployment files by Helm chart directory.
+
+        Finds Chart.yaml files and associates nearby files with their charts,
+        extracting values.yaml content for template resolution.
+
+        Args:
+            deployment_files: List of file dicts with 'path' and 'content'
+
+        Returns:
+            Dict mapping directory paths to chart info:
+            {
+                "charts/myapp": {
+                    "values": {...},  # Parsed values.yaml content
+                    "files": [...]    # Paths of files in this chart
+                }
+            }
+        """
+        charts = {}
+        values_by_dir = {}
+
+        # First pass: find all values.yaml files and extract their content
+        for file_info in deployment_files:
+            path = file_info["path"]
+            content = file_info["content"]
+
+            if path.endswith("values.yaml"):
+                # Get directory containing values.yaml
+                dir_path = "/".join(path.split("/")[:-1]) if "/" in path else ""
+                try:
+                    import yaml
+                    values = yaml.safe_load(content)
+                    if isinstance(values, dict):
+                        values_by_dir[dir_path] = values
+                        logger.info(f"Found values.yaml in {dir_path}")
+                except Exception as e:
+                    logger.info(f"Could not parse values.yaml at {path}: {e}")
+
+        # Second pass: associate files with their chart's values
+        for file_info in deployment_files:
+            path = file_info["path"]
+            # Find the closest values.yaml by checking parent directories
+            parts = path.split("/")
+            for i in range(len(parts) - 1, -1, -1):
+                dir_path = "/".join(parts[:i]) if i > 0 else ""
+                if dir_path in values_by_dir:
+                    if dir_path not in charts:
+                        charts[dir_path] = {
+                            "values": values_by_dir[dir_path],
+                            "files": []
+                        }
+                    charts[dir_path]["files"].append(path)
+                    break
+
+        return charts
+
     def __init__(self):
         """Initialize the extractor with git handler and YAML parser."""
         # Get tokens from environment variables
@@ -60,6 +119,15 @@ class RequirementsExtractor:
             # Step 3: Fetch deployment YAML files
             deployment_files = self.git_handler.fetch_deployment_files(owner, repo, platform)
 
+            # Step 3.5: Group files by Helm chart to resolve templating
+            helm_charts = self._group_files_by_helm_chart(deployment_files)
+
+            # Build a lookup of file path -> values for template resolution
+            file_to_values = {}
+            for chart_dir, chart_info in helm_charts.items():
+                for file_path in chart_info.get("files", []):
+                    file_to_values[file_path] = chart_info.get("values", {})
+
             # Step 4: Parse YAML files to extract structured resource requirements and CRDs
             parsed_yaml_resources = []
             yaml_files_with_parsed = []
@@ -69,8 +137,11 @@ class RequirementsExtractor:
                 file_path = file_info["path"]
                 content = file_info["content"]
 
-                # Parse the YAML content for resources
-                parsed = self.yaml_parser.parse_yaml_content(content, file_path)
+                # Get values.yaml content for this file's chart (if available)
+                chart_values = file_to_values.get(file_path)
+
+                # Parse the YAML content for resources (with template resolution)
+                parsed = self.yaml_parser.parse_yaml_content(content, file_path, values=chart_values)
 
                 # Extract CRD definitions from YAML
                 crds_in_file = self.yaml_parser.extract_crds_from_content(content)
@@ -93,6 +164,12 @@ class RequirementsExtractor:
 
             # Add required CRDs to summary
             yaml_summary["required_crds"] = required_crds
+
+            # Step 5.5: Detect GPU keywords in README (fallback for Helm templating)
+            gpu_likely_required = self._detect_gpu_keywords_in_readme(readme_content)
+            if gpu_likely_required:
+                yaml_summary["gpu_likely_required"] = True
+                logger.info("GPU keywords detected in README - flagging as likely GPU requirement")
 
             # Step 6: Scan cluster (NEW)
             cluster_info = None
@@ -132,7 +209,7 @@ class RequirementsExtractor:
                 "cluster_info": cluster_info,  # NEW
                 "feasibility_check": feasibility_check,  # NEW
                 "instructions_for_llm": self._generate_instructions(
-                    cluster_info, feasibility_check
+                    cluster_info, feasibility_check, yaml_summary
                 ),
             }
 
@@ -260,8 +337,34 @@ class RequirementsExtractor:
         """
         return compare_memory(mem1, mem2)
 
+    def _detect_gpu_keywords_in_readme(self, readme_content: str) -> bool:
+        """
+        Check if README mentions GPU/accelerator requirements.
+
+        This is used as a fallback when YAML parsing doesn't find GPU requirements,
+        which commonly happens with Helm charts that use templating.
+
+        Args:
+            readme_content: README text content
+
+        Returns:
+            True if GPU-related keywords are found
+        """
+        if not readme_content:
+            return False
+
+        gpu_keywords = [
+            'gpu', 'nvidia', 'cuda', 'accelerator', 'a100', 'h100',
+            'l4', 'l40', 'vllm', 'tensor', 'inference', 'training',
+            'datacenter-class', 'nvidia.com/gpu', 'amd.com/gpu',
+            'intel.com/gpu', 'tpu', 'mi250', 'mi300'
+        ]
+        readme_lower = readme_content.lower()
+        return any(keyword in readme_lower for keyword in gpu_keywords)
+
     def _generate_instructions(
-        self, cluster_info: Optional[Dict], feasibility_check: Optional[Dict]
+        self, cluster_info: Optional[Dict], feasibility_check: Optional[Dict],
+        yaml_summary: Optional[Dict] = None
     ) -> str:
         """
         Generate LLM instructions based on available data.
@@ -269,6 +372,7 @@ class RequirementsExtractor:
         Args:
             cluster_info: Cluster scan results (may be None)
             feasibility_check: Feasibility check results (may be None)
+            yaml_summary: Aggregated YAML requirements including gpu_likely_required flag
 
         Returns:
             Instructions string for LLM
@@ -281,6 +385,14 @@ class RequirementsExtractor:
             "extracted from YAML files - use this as a baseline and supplement it with "
             "any additional requirements found in the README."
         )
+
+        # Add GPU keyword warning if detected
+        if yaml_summary and yaml_summary.get("gpu_likely_required"):
+            base_instructions += (
+                "\n\n⚠️ NOTE: GPU-related keywords were detected in the README. "
+                "This application likely requires GPU resources even if not explicitly "
+                "specified in the YAML files (common with Helm charts using templating)."
+            )
 
         if cluster_info:
             nodes_info = cluster_info.get("nodes", {})
@@ -362,6 +474,15 @@ class RequirementsExtractor:
             # Step 3: Fetch deployment YAML files
             deployment_files = self.git_handler.fetch_deployment_files(owner, repo, platform)
 
+            # Step 3.5: Group files by Helm chart to resolve templating
+            helm_charts = self._group_files_by_helm_chart(deployment_files)
+
+            # Build a lookup of file path -> values for template resolution
+            file_to_values = {}
+            for chart_dir, chart_info in helm_charts.items():
+                for file_path in chart_info.get("files", []):
+                    file_to_values[file_path] = chart_info.get("values", {})
+
             # Step 4: Parse YAML files to extract structured resource requirements and CRDs
             parsed_yaml_resources = []
             yaml_files_with_parsed = []
@@ -371,8 +492,11 @@ class RequirementsExtractor:
                 file_path = file_info["path"]
                 content = file_info["content"]
 
-                # Parse the YAML content for resources
-                parsed = self.yaml_parser.parse_yaml_content(content, file_path)
+                # Get values.yaml content for this file's chart (if available)
+                chart_values = file_to_values.get(file_path)
+
+                # Parse the YAML content for resources (with template resolution)
+                parsed = self.yaml_parser.parse_yaml_content(content, file_path, values=chart_values)
 
                 # Extract CRD definitions from YAML
                 crds_in_file = self.yaml_parser.extract_crds_from_content(content)

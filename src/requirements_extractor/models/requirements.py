@@ -104,6 +104,7 @@ class ParsedYAMLResources(BaseModel):
     node_selector: Optional[Dict[str, str]] = None
     tolerations: List[str] = Field(default_factory=list)
     affinity_requirements: List[str] = Field(default_factory=list)
+    has_unresolved_templating: bool = False  # Flag for Helm templating that couldn't be resolved
 
     def to_hardware_requirement(self, source: str) -> Optional[HardwareRequirement]:
         """
