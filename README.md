@@ -99,14 +99,23 @@ Then edit `~/.claude/mcp_config.json`:
   "mcpServers": {
     "openshift-installer-checker": {
       "command": "uv",
-      "args": ["run", "python", "main.py"],
-      "cwd": "~/path/to/mcp-openshift-installer-checker"
+      "args": [
+        "--directory",
+        "/path/to/mcp-openshift-installer-checker",
+        "run",
+        "python",
+        "main.py"
+      ],
+      "cwd": "/path/to/mcp-openshift-installer-checker",
+      "env": {
+        "GITHUB_TOKEN": "<your-github-token>"
+      }
     }
   }
 }
 ```
 
-**Note**: Replace `~/path/to/mcp-openshift-installer-checker` with the actual path where you cloned the repository.
+**Note**: Replace `/path/to/mcp-openshift-installer-checker` with the actual path where you cloned the repository, and `<your-github-token>` with your GitHub personal access token.
 
 Then use Claude Code:
 ```bash
@@ -126,18 +135,29 @@ cd mcp-openshift-installer-checker
 uv sync
 ```
 
-Then in Cursor settings (`Cursor Settings > Features > Model Context Protocol`), add:
+Then edit `~/.cursor/mcp.json`:
 ```json
 {
-  "openshift-installer-checker": {
-    "command": "uv",
-    "args": ["run", "python", "main.py"],
-    "cwd": "~/path/to/mcp-openshift-installer-checker"
+  "mcpServers": {
+    "openshift-installer-checker": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/mcp-openshift-installer-checker",
+        "run",
+        "python",
+        "main.py"
+      ],
+      "cwd": "/path/to/mcp-openshift-installer-checker",
+      "env": {
+        "GITHUB_TOKEN": "<your-github-token>"
+      }
+    }
   }
 }
 ```
 
-**Note**: Replace `~/path/to/mcp-openshift-installer-checker` with the actual path where you cloned the repository.
+**Note**: Replace `/path/to/mcp-openshift-installer-checker` with the actual path where you cloned the repository, and `<your-github-token>` with your GitHub personal access token.
 
 Then ask in Cursor chat: "Analyze installation requirements for https://github.com/your/repo and check if it can be installed"
 
