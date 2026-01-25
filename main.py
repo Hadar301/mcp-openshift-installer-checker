@@ -4,6 +4,7 @@ OpenShift/Kubernetes Installer Checker - MCP Server
 This MCP server analyzes git repositories to extract application requirements
 and helps determine if an application can be installed on an OpenShift/K8s cluster.
 """
+
 from mcp.server.fastmcp import FastMCP
 from src.requirements_extractor.extractor import RequirementsExtractor
 
@@ -117,20 +118,17 @@ def scan_cluster() -> dict:
     if not scanner.is_cluster_available():
         return {
             "success": False,
-            "error": "Cluster not accessible. Please connect to an OpenShift/Kubernetes cluster using 'oc login' or 'kubectl config use-context'."
+            "error": "Cluster not accessible. Please connect to an OpenShift/Kubernetes cluster using 'oc login' or 'kubectl config use-context'.",
         }
 
     cluster_info = scanner.scan_cluster()
 
     if cluster_info:
-        return {
-            "success": True,
-            "cluster_info": cluster_info
-        }
+        return {"success": True, "cluster_info": cluster_info}
     else:
         return {
             "success": False,
-            "error": "Failed to scan cluster. Check cluster connectivity."
+            "error": "Failed to scan cluster. Check cluster connectivity.",
         }
 
 

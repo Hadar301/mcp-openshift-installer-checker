@@ -66,21 +66,21 @@ def memory_to_bytes(memory: str) -> float:
         if memory_str.endswith("KI"):
             return float(memory_str[:-2]) * 1024
         elif memory_str.endswith("MI"):
-            return float(memory_str[:-2]) * 1024 ** 2
+            return float(memory_str[:-2]) * 1024**2
         elif memory_str.endswith("GI"):
-            return float(memory_str[:-2]) * 1024 ** 3
+            return float(memory_str[:-2]) * 1024**3
         elif memory_str.endswith("TI"):
-            return float(memory_str[:-2]) * 1024 ** 4
+            return float(memory_str[:-2]) * 1024**4
 
         # Decimal units (K, M, G, T)
         elif memory_str.endswith("K"):
             return float(memory_str[:-1]) * 1000
         elif memory_str.endswith("M"):
-            return float(memory_str[:-1]) * 1000 ** 2
+            return float(memory_str[:-1]) * 1000**2
         elif memory_str.endswith("G"):
-            return float(memory_str[:-1]) * 1000 ** 3
+            return float(memory_str[:-1]) * 1000**3
         elif memory_str.endswith("T"):
-            return float(memory_str[:-1]) * 1000 ** 4
+            return float(memory_str[:-1]) * 1000**4
 
         # Assume bytes if no unit
         return float(memory_str)
@@ -169,11 +169,11 @@ def bytes_to_human_readable(bytes_value: float, binary: bool = True) -> str:
 
     if binary:
         # Kubernetes binary units
-        units = ['', 'Ki', 'Mi', 'Gi', 'Ti']
+        units = ["", "Ki", "Mi", "Gi", "Ti"]
         base = 1024
     else:
         # Decimal units
-        units = ['', 'K', 'M', 'G', 'T']
+        units = ["", "K", "M", "G", "T"]
         base = 1000
 
     value = float(bytes_value)
@@ -248,4 +248,4 @@ def parse_storage_size(storage: str) -> float:
     """
     # Convert to bytes first, then to Gi
     bytes_value = memory_to_bytes(storage)
-    return bytes_value / (1024 ** 3)
+    return bytes_value / (1024**3)

@@ -9,7 +9,10 @@ from typing import Any, Dict, List, Optional
 
 from src.requirements_extractor.git_handler import GitRepoHandler
 from src.requirements_extractor.parser.yaml_parser import YAMLParser
-from src.requirements_extractor.utils.resource_comparisons import compare_cpu, compare_memory
+from src.requirements_extractor.utils.resource_comparisons import (
+    compare_cpu,
+    compare_memory,
+)
 
 
 class RequirementsExtractor:
@@ -49,6 +52,7 @@ class RequirementsExtractor:
                 dir_path = "/".join(path.split("/")[:-1]) if "/" in path else ""
                 try:
                     import yaml
+
                     values = yaml.safe_load(content)
                     if isinstance(values, dict):
                         values_by_dir[dir_path] = values
@@ -66,7 +70,7 @@ class RequirementsExtractor:
                     if dir_path not in charts:
                         charts[dir_path] = {
                             "values": values_by_dir[dir_path],
-                            "files": []
+                            "files": [],
                         }
                     charts[dir_path]["files"].append(path)
                     break
@@ -79,7 +83,9 @@ class RequirementsExtractor:
         github_token = os.getenv("GITHUB_TOKEN")
         gitlab_token = os.getenv("GITLAB_TOKEN")
 
-        self.git_handler = GitRepoHandler(github_token=github_token, gitlab_token=gitlab_token)
+        self.git_handler = GitRepoHandler(
+            github_token=github_token, gitlab_token=gitlab_token
+        )
         self.yaml_parser = YAMLParser()
 
     def check_feasibility_full(self, repo_url: str) -> Dict[str, Any]:
@@ -104,7 +110,9 @@ class RequirementsExtractor:
             platform, owner, repo = self.git_handler.parse_repo_url(repo_url)
 
             # Step 2: Fetch all markdown files (replaces fetch_readme)
-            markdown_files = self.git_handler.fetch_markdown_files(owner, repo, platform)
+            markdown_files = self.git_handler.fetch_markdown_files(
+                owner, repo, platform
+            )
 
             # Combine for backward compatibility - put README first if exists
             readme_content = ""
@@ -116,10 +124,14 @@ class RequirementsExtractor:
             # Append other markdown files
             for md_file in markdown_files:
                 if md_file["path"].lower() != "readme.md":
-                    readme_content += f"\n\n--- {md_file['path']} ---\n\n{md_file['content']}"
+                    readme_content += (
+                        f"\n\n--- {md_file['path']} ---\n\n{md_file['content']}"
+                    )
 
             # Step 3: Fetch deployment YAML files
-            deployment_files = self.git_handler.fetch_deployment_files(owner, repo, platform)
+            deployment_files = self.git_handler.fetch_deployment_files(
+                owner, repo, platform
+            )
 
             # Step 3.5: Group files by Helm chart to resolve templating
             helm_charts = self._group_files_by_helm_chart(deployment_files)
@@ -140,22 +152,30 @@ class RequirementsExtractor:
                 content = file_info["content"]
 
                 # Skip files that don't contain Kubernetes objects (unless they're values.yaml or Chart.yaml)
-                is_helm_file = file_path.endswith("values.yaml") or file_path.endswith("Chart.yaml")
-                if not is_helm_file and not self.yaml_parser.is_kubernetes_manifest(content):
+                is_helm_file = file_path.endswith("values.yaml") or file_path.endswith(
+                    "Chart.yaml"
+                )
+                if not is_helm_file and not self.yaml_parser.is_kubernetes_manifest(
+                    content
+                ):
                     continue
 
                 # Get values.yaml content for this file's chart (if available)
                 chart_values = file_to_values.get(file_path)
 
                 # Parse the YAML content for resources (with template resolution)
-                parsed = self.yaml_parser.parse_yaml_content(content, file_path, values=chart_values)
+                parsed = self.yaml_parser.parse_yaml_content(
+                    content, file_path, values=chart_values
+                )
 
                 # Extract CRD definitions from YAML
                 crds_in_file = self.yaml_parser.extract_crds_from_content(content)
                 required_crds.extend(crds_in_file)
 
                 # Store parsed resources
-                parsed_yaml_resources.append({"file": file_path, "resources": parsed.model_dump()})
+                parsed_yaml_resources.append(
+                    {"file": file_path, "resources": parsed.model_dump()}
+                )
 
                 # Also store file with its content for LLM analysis
                 yaml_files_with_parsed.append(
@@ -196,7 +216,9 @@ class RequirementsExtractor:
 
                         # Step 7: Check feasibility (NEW)
                         checker = FeasibilityChecker()
-                        feasibility_result = checker.check_feasibility(yaml_summary, cluster_data)
+                        feasibility_result = checker.check_feasibility(
+                            yaml_summary, cluster_data
+                        )
                         feasibility_check = feasibility_result.model_dump()
 
             except Exception:
@@ -210,11 +232,18 @@ class RequirementsExtractor:
                     "readme_found": bool(readme_content and len(readme_content) > 100),
                     "readme_length_chars": len(readme_content) if readme_content else 0,
                     "deployment_files_count": len(yaml_files_with_parsed),
-                    "deployment_file_paths": [f["path"] for f in yaml_files_with_parsed[:10]],
+                    "deployment_file_paths": [
+                        f["path"] for f in yaml_files_with_parsed[:10]
+                    ],
                     "has_cluster_info": cluster_info is not None,
                     "has_feasibility_check": feasibility_check is not None,
                 },
-                "repo_info": {"url": repo_url, "platform": platform, "owner": owner, "repo": repo},
+                "repo_info": {
+                    "url": repo_url,
+                    "platform": platform,
+                    "owner": owner,
+                    "repo": repo,
+                },
                 "readme_content": readme_content or "No README found",
                 "deployment_files": yaml_files_with_parsed,
                 "yaml_extracted_requirements": yaml_summary,
@@ -264,7 +293,10 @@ class RequirementsExtractor:
             # Aggregate CPU (take maximum)
             if resources.get("cpu_requests"):
                 cpu = resources["cpu_requests"]
-                if max_cpu_requests is None or self._compare_cpu(cpu, max_cpu_requests) > 0:
+                if (
+                    max_cpu_requests is None
+                    or self._compare_cpu(cpu, max_cpu_requests) > 0
+                ):
                     max_cpu_requests = cpu
 
             # Aggregate Memory (take maximum)
@@ -322,7 +354,9 @@ class RequirementsExtractor:
                 "cpu": max_cpu_requests,
                 "memory": max_memory_requests,
                 "gpu": gpu_requirements,
-                "extended_resources": all_extended_resources if all_extended_resources else None,
+                "extended_resources": all_extended_resources
+                if all_extended_resources
+                else None,
                 "storage": all_storage_requests if all_storage_requests else None,
             },
             "node_requirements": {
@@ -366,17 +400,34 @@ class RequirementsExtractor:
             return False
 
         gpu_keywords = [
-            'gpu', 'nvidia', 'cuda', 'accelerator', 'a100', 'h100',
-            'l4', 'l40', 'vllm', 'tensor', 'inference', 'training',
-            'datacenter-class', 'nvidia.com/gpu', 'amd.com/gpu',
-            'intel.com/gpu', 'tpu', 'mi250', 'mi300'
+            "gpu",
+            "nvidia",
+            "cuda",
+            "accelerator",
+            "a100",
+            "h100",
+            "l4",
+            "l40",
+            "vllm",
+            "tensor",
+            "inference",
+            "training",
+            "datacenter-class",
+            "nvidia.com/gpu",
+            "amd.com/gpu",
+            "intel.com/gpu",
+            "tpu",
+            "mi250",
+            "mi300",
         ]
         readme_lower = readme_content.lower()
         return any(keyword in readme_lower for keyword in gpu_keywords)
 
     def _generate_instructions(
-        self, cluster_info: Optional[Dict], feasibility_check: Optional[Dict],
-        yaml_summary: Optional[Dict] = None
+        self,
+        cluster_info: Optional[Dict],
+        feasibility_check: Optional[Dict],
+        yaml_summary: Optional[Dict] = None,
     ) -> str:
         """
         Generate LLM instructions based on available data.
@@ -425,13 +476,9 @@ class RequirementsExtractor:
                     f"({nodes_info.get('cpu_usage_percent', 0):.1f}% used)\n"
                 )
             else:
-                cluster_instructions += (
-                    "- CPU current usage: unknown (metrics-server may not be available)\n"
-                )
+                cluster_instructions += "- CPU current usage: unknown (metrics-server may not be available)\n"
 
-            cluster_instructions += (
-                f"- {nodes_info.get('allocatable_memory', 'unknown')} memory allocatable\n"
-            )
+            cluster_instructions += f"- {nodes_info.get('allocatable_memory', 'unknown')} memory allocatable\n"
 
             if nodes_info.get("available_memory") is not None:
                 cluster_instructions += (
@@ -439,14 +486,14 @@ class RequirementsExtractor:
                     f"({nodes_info.get('memory_usage_percent', 0):.1f}% used)\n"
                 )
             else:
-                cluster_instructions += (
-                    "- Memory current usage: unknown (metrics-server may not be available)\n"
-                )
+                cluster_instructions += "- Memory current usage: unknown (metrics-server may not be available)\n"
 
             cluster_instructions += f"- {gpu_info.get('total_gpus', 0)} GPUs\n"
 
             if feasibility_check:
-                from src.requirements_extractor.models.requirements import FeasibilityCheck
+                from src.requirements_extractor.models.requirements import (
+                    FeasibilityCheck,
+                )
 
                 feasibility_obj = FeasibilityCheck(**feasibility_check)
                 feasibility_summary = feasibility_obj.to_summary()
@@ -481,7 +528,9 @@ class RequirementsExtractor:
             platform, owner, repo = self.git_handler.parse_repo_url(repo_url)
 
             # Step 2: Fetch all markdown files (replaces fetch_readme)
-            markdown_files = self.git_handler.fetch_markdown_files(owner, repo, platform)
+            markdown_files = self.git_handler.fetch_markdown_files(
+                owner, repo, platform
+            )
 
             # Combine for backward compatibility - put README first if exists
             readme_content = ""
@@ -493,10 +542,14 @@ class RequirementsExtractor:
             # Append other markdown files
             for md_file in markdown_files:
                 if md_file["path"].lower() != "readme.md":
-                    readme_content += f"\n\n--- {md_file['path']} ---\n\n{md_file['content']}"
+                    readme_content += (
+                        f"\n\n--- {md_file['path']} ---\n\n{md_file['content']}"
+                    )
 
             # Step 3: Fetch deployment YAML files
-            deployment_files = self.git_handler.fetch_deployment_files(owner, repo, platform)
+            deployment_files = self.git_handler.fetch_deployment_files(
+                owner, repo, platform
+            )
 
             # Step 3.5: Group files by Helm chart to resolve templating
             helm_charts = self._group_files_by_helm_chart(deployment_files)
@@ -517,29 +570,39 @@ class RequirementsExtractor:
                 content = file_info["content"]
 
                 # Skip files that don't contain Kubernetes objects (unless they're values.yaml or Chart.yaml)
-                is_helm_file = file_path.endswith("values.yaml") or file_path.endswith("Chart.yaml")
-                if not is_helm_file and not self.yaml_parser.is_kubernetes_manifest(content):
+                is_helm_file = file_path.endswith("values.yaml") or file_path.endswith(
+                    "Chart.yaml"
+                )
+                if not is_helm_file and not self.yaml_parser.is_kubernetes_manifest(
+                    content
+                ):
                     continue
 
                 # Get values.yaml content for this file's chart (if available)
                 chart_values = file_to_values.get(file_path)
 
                 # Parse the YAML content for resources (with template resolution)
-                parsed = self.yaml_parser.parse_yaml_content(content, file_path, values=chart_values)
+                parsed = self.yaml_parser.parse_yaml_content(
+                    content, file_path, values=chart_values
+                )
 
                 # Extract CRD definitions from YAML
                 crds_in_file = self.yaml_parser.extract_crds_from_content(content)
                 required_crds.extend(crds_in_file)
 
                 # Store parsed resources
-                parsed_yaml_resources.append({"file": file_path, "resources": parsed.model_dump()})
+                parsed_yaml_resources.append(
+                    {"file": file_path, "resources": parsed.model_dump()}
+                )
 
                 # Also store file with its content for LLM analysis
-                yaml_files_with_parsed.append({
-                    "path": file_path,
-                    "content": content,
-                    "parsed_resources": parsed.model_dump(),
-                })
+                yaml_files_with_parsed.append(
+                    {
+                        "path": file_path,
+                        "content": content,
+                        "parsed_resources": parsed.model_dump(),
+                    }
+                )
 
             # Step 5: Aggregate YAML-extracted requirements into a summary
             yaml_summary = self._aggregate_yaml_requirements(parsed_yaml_resources)
@@ -554,9 +617,16 @@ class RequirementsExtractor:
                     "readme_found": bool(readme_content and len(readme_content) > 100),
                     "readme_length_chars": len(readme_content) if readme_content else 0,
                     "deployment_files_count": len(yaml_files_with_parsed),
-                    "deployment_file_paths": [f["path"] for f in yaml_files_with_parsed[:10]],
+                    "deployment_file_paths": [
+                        f["path"] for f in yaml_files_with_parsed[:10]
+                    ],
                 },
-                "repo_info": {"url": repo_url, "platform": platform, "owner": owner, "repo": repo},
+                "repo_info": {
+                    "url": repo_url,
+                    "platform": platform,
+                    "owner": owner,
+                    "repo": repo,
+                },
                 "readme_content": readme_content or "No README found",
                 "deployment_files": yaml_files_with_parsed,
                 "yaml_extracted_requirements": yaml_summary,
@@ -567,7 +637,7 @@ class RequirementsExtractor:
                     "The yaml_extracted_requirements section contains structured data already "
                     "extracted from YAML files - use this as a baseline and supplement it with "
                     "any additional requirements found in the README."
-                )
+                ),
             }
 
         except ValueError as e:

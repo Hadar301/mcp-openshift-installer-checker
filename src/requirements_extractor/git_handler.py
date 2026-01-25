@@ -39,7 +39,9 @@ class GitRepoHandler:
         "kustomization.yaml",
     ]
 
-    def __init__(self, github_token: Optional[str] = None, gitlab_token: Optional[str] = None):
+    def __init__(
+        self, github_token: Optional[str] = None, gitlab_token: Optional[str] = None
+    ):
         """
         Initialize the handler with optional API tokens.
 
@@ -105,7 +107,9 @@ class GitRepoHandler:
         else:
             raise ValueError(f"Unsupported platform: {platform}")
 
-    def fetch_deployment_files(self, owner: str, repo: str, platform: str) -> List[Dict[str, str]]:
+    def fetch_deployment_files(
+        self, owner: str, repo: str, platform: str
+    ) -> List[Dict[str, str]]:
         """
         Find and fetch all deployment-related YAML files.
 
@@ -137,7 +141,9 @@ class GitRepoHandler:
 
         return deployment_files
 
-    def fetch_markdown_files(self, owner: str, repo: str, platform: str) -> List[Dict[str, str]]:
+    def fetch_markdown_files(
+        self, owner: str, repo: str, platform: str
+    ) -> List[Dict[str, str]]:
         """
         Find and fetch all markdown files from the repository.
 
@@ -205,7 +211,11 @@ class GitRepoHandler:
                     item["path"]
                     for item in tree
                     if item["type"] == "blob"
-                    and (item["path"].endswith(".yaml") or item["path"].endswith(".yml") or item["path"].endswith(".md"))
+                    and (
+                        item["path"].endswith(".yaml")
+                        or item["path"].endswith(".yml")
+                        or item["path"].endswith(".md")
+                    )
                 ]
                 return file_paths
 
@@ -214,7 +224,9 @@ class GitRepoHandler:
 
         return []
 
-    def _get_files_from_common_paths(self, owner: str, repo: str, platform: str) -> List[str]:
+    def _get_files_from_common_paths(
+        self, owner: str, repo: str, platform: str
+    ) -> List[str]:
         """
         Fallback method: search common deployment paths.
 
@@ -258,10 +270,24 @@ class GitRepoHandler:
 
         # Accept all YAML files from known deployment directories
         path_lower = file_path.lower()
-        deployment_dirs = ["helm", "deploy", "k8s", "manifests", "charts", "operators",
-                          "deployment", "kubernetes", "openshift", "config", "kustomize"]
+        deployment_dirs = [
+            "helm",
+            "deploy",
+            "k8s",
+            "manifests",
+            "charts",
+            "operators",
+            "deployment",
+            "kubernetes",
+            "openshift",
+            "config",
+            "kustomize",
+        ]
 
-        if any(f"/{dir}/" in path_lower or path_lower.startswith(f"{dir}/") for dir in deployment_dirs):
+        if any(
+            f"/{dir}/" in path_lower or path_lower.startswith(f"{dir}/")
+            for dir in deployment_dirs
+        ):
             return True
 
         # Check exact matches for common deployment file names
@@ -269,9 +295,27 @@ class GitRepoHandler:
             return True
 
         # Accept files with common deployment-related keywords in filename
-        keywords = ["deploy", "stateful", "daemon", "config", "kustomize", "helm",
-                   "operator", "service", "ingress", "networkpolicy", "pvc", "pod",
-                   "job", "cronjob", "secret", "role", "route", "hpa", "application"]
+        keywords = [
+            "deploy",
+            "stateful",
+            "daemon",
+            "config",
+            "kustomize",
+            "helm",
+            "operator",
+            "service",
+            "ingress",
+            "networkpolicy",
+            "pvc",
+            "pod",
+            "job",
+            "cronjob",
+            "secret",
+            "role",
+            "route",
+            "hpa",
+            "application",
+        ]
 
         if any(keyword in file_name.lower() for keyword in keywords):
             return True
@@ -315,11 +359,15 @@ class GitRepoHandler:
             headers["PRIVATE-TOKEN"] = self.gitlab_token
 
         try:
-            response = requests.get(url, headers=headers, params={"ref": "main"}, timeout=10)
+            response = requests.get(
+                url, headers=headers, params={"ref": "main"}, timeout=10
+            )
 
             # Try master if main doesn't exist
             if response.status_code == 404:
-                response = requests.get(url, headers=headers, params={"ref": "master"}, timeout=10)
+                response = requests.get(
+                    url, headers=headers, params={"ref": "master"}, timeout=10
+                )
 
             response.raise_for_status()
             return response.text
@@ -327,7 +375,9 @@ class GitRepoHandler:
         except requests.RequestException:
             return None
 
-    def _fetch_file(self, owner: str, repo: str, path: str, platform: str) -> Optional[str]:
+    def _fetch_file(
+        self, owner: str, repo: str, path: str, platform: str
+    ) -> Optional[str]:
         """Fetch a file from the specified platform."""
         if platform == "github":
             return self._fetch_github_file(owner, repo, path)
@@ -345,7 +395,9 @@ class GitRepoHandler:
             return self._list_gitlab_directory(owner, repo, path)
         return []
 
-    def _list_github_directory(self, owner: str, repo: str, path: str) -> List[Dict[str, str]]:
+    def _list_github_directory(
+        self, owner: str, repo: str, path: str
+    ) -> List[Dict[str, str]]:
         """List files in a GitHub directory."""
         url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
         headers = {"Accept": "application/vnd.github.v3+json"}
@@ -370,7 +422,9 @@ class GitRepoHandler:
 
         return []
 
-    def _list_gitlab_directory(self, owner: str, repo: str, path: str) -> List[Dict[str, str]]:
+    def _list_gitlab_directory(
+        self, owner: str, repo: str, path: str
+    ) -> List[Dict[str, str]]:
         """List files in a GitLab directory."""
         project_id = f"{owner}/{repo}".replace("/", "%2F")
         url = f"https://gitlab.com/api/v4/projects/{project_id}/repository/tree"

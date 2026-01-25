@@ -1,6 +1,7 @@
 """
 Test CRD conflict detection functionality.
 """
+
 from src.requirements_extractor.extractor import RequirementsExtractor
 import json
 
@@ -31,9 +32,9 @@ def test_crd_detection():
     if required_crds:
         print("\nCRD Details:")
         for crd in required_crds:
-            name = crd.get('name', 'unknown')
-            group = crd.get('group', 'unknown')
-            versions = crd.get('versions', [])
+            name = crd.get("name", "unknown")
+            group = crd.get("group", "unknown")
+            versions = crd.get("versions", [])
             print(f"  - {name}")
             print(f"    Group: {group}")
             print(f"    Versions: {', '.join(versions) if versions else 'unknown'}")
@@ -50,19 +51,19 @@ def test_crd_detection():
         print(f"\nFeasible: {feasibility.get('is_feasible')}")
         print(f"Confidence: {feasibility.get('confidence')}")
 
-        reasons_pass = feasibility.get('reasons_pass', [])
+        reasons_pass = feasibility.get("reasons_pass", [])
         if reasons_pass:
             print("\nReasons PASS:")
             for reason in reasons_pass:
                 print(f"  ✓ {reason}")
 
-        warnings = feasibility.get('warnings', [])
+        warnings = feasibility.get("warnings", [])
         if warnings:
             print("\nWarnings:")
             for warning in warnings:
                 print(f"  ⚠ {warning}")
 
-        reasons_fail = feasibility.get('reasons_fail', [])
+        reasons_fail = feasibility.get("reasons_fail", [])
         if reasons_fail:
             print("\nReasons FAIL:")
             for reason in reasons_fail:

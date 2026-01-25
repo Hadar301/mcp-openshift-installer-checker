@@ -4,13 +4,14 @@ Feasibility Checker - Determines if app requirements can be met by cluster.
 This module compares extracted application requirements against cluster capacity
 to determine if the application can be installed successfully.
 """
+
 from typing import Dict, Any, List, Tuple
 
 from src.requirements_extractor.models.requirements import FeasibilityCheck
 from src.requirements_extractor.utils.resource_comparisons import (
     compare_cpu,
     compare_memory,
-    parse_storage_size
+    parse_storage_size,
 )
 
 
@@ -22,9 +23,7 @@ class FeasibilityChecker:
         pass
 
     def check_feasibility(
-        self,
-        requirements: Dict[str, Any],
-        cluster_info: Dict[str, Any]
+        self, requirements: Dict[str, Any], cluster_info: Dict[str, Any]
     ) -> FeasibilityCheck:
         """
         Main entry point: Check if requirements can be met.
@@ -40,44 +39,48 @@ class FeasibilityChecker:
         reasons_fail = []
         warnings = []
 
-        hardware = requirements.get('hardware', {})
+        hardware = requirements.get("hardware", {})
 
         # Check CPU
-        if hardware.get('cpu'):
-            cpu_ok, msg = self._check_cpu(hardware['cpu'], cluster_info)
+        if hardware.get("cpu"):
+            cpu_ok, msg = self._check_cpu(hardware["cpu"], cluster_info)
             if cpu_ok:
                 reasons_pass.append(msg)
             else:
                 reasons_fail.append(msg)
 
         # Check Memory
-        if hardware.get('memory'):
-            mem_ok, msg = self._check_memory(hardware['memory'], cluster_info)
+        if hardware.get("memory"):
+            mem_ok, msg = self._check_memory(hardware["memory"], cluster_info)
             if mem_ok:
                 reasons_pass.append(msg)
             else:
                 reasons_fail.append(msg)
 
         # Check GPU
-        if hardware.get('gpu'):
-            gpu_ok, msg = self._check_gpu(hardware['gpu'], cluster_info)
+        if hardware.get("gpu"):
+            gpu_ok, msg = self._check_gpu(hardware["gpu"], cluster_info)
             if gpu_ok:
                 reasons_pass.append(msg)
             else:
                 reasons_fail.append(msg)
 
         # Check Extended Resources (RDMA, FPGAs, etc.)
-        if hardware.get('extended_resources'):
-            for resource_type, required_count in hardware['extended_resources'].items():
-                ext_ok, ext_msg = self._check_extended_resource(resource_type, required_count, cluster_info)
+        if hardware.get("extended_resources"):
+            for resource_type, required_count in hardware["extended_resources"].items():
+                ext_ok, ext_msg = self._check_extended_resource(
+                    resource_type, required_count, cluster_info
+                )
                 if ext_ok:
                     reasons_pass.append(ext_msg)
                 else:
                     reasons_fail.append(ext_msg)
 
         # Check Storage
-        if hardware.get('storage'):
-            storage_ok, storage_msgs = self._check_storage(hardware['storage'], cluster_info)
+        if hardware.get("storage"):
+            storage_ok, storage_msgs = self._check_storage(
+                hardware["storage"], cluster_info
+            )
             if storage_ok:
                 reasons_pass.extend(storage_msgs)
             else:
@@ -85,14 +88,14 @@ class FeasibilityChecker:
                 warnings.extend(storage_msgs)
 
         # Check Software
-        software_reqs = requirements.get('software_inferred', [])
+        software_reqs = requirements.get("software_inferred", [])
         if software_reqs:
             sw_ok, sw_msgs = self._check_software(software_reqs, cluster_info)
             if not sw_ok:
                 warnings.extend(sw_msgs)
 
         # Check CRD Conflicts (NEW)
-        required_crds = requirements.get('required_crds', [])
+        required_crds = requirements.get("required_crds", [])
         if required_crds:
             crd_ok, crd_msgs = self._check_crd_conflicts(required_crds, cluster_info)
             if not crd_ok:
@@ -121,7 +124,7 @@ class FeasibilityChecker:
             confidence=confidence,
             reasons_pass=reasons_pass,
             reasons_fail=reasons_fail,
-            warnings=warnings
+            warnings=warnings,
         )
 
     def _check_cpu(self, required: str, cluster: Dict) -> Tuple[bool, str]:
@@ -135,29 +138,41 @@ class FeasibilityChecker:
         Returns:
             (is_sufficient, message)
         """
-        nodes_info = cluster.get('nodes', {})
+        nodes_info = cluster.get("nodes", {})
 
         # Prefer available over allocatable
-        available = nodes_info.get('available_cpu')
-        allocatable = nodes_info.get('allocatable_cpu', '0')
-        used = nodes_info.get('used_cpu')
+        available = nodes_info.get("available_cpu")
+        allocatable = nodes_info.get("allocatable_cpu", "0")
+        used = nodes_info.get("used_cpu")
 
         if available is not None:
             # Usage data available - check against available resources
             comparison = compare_cpu(available, required)
 
             if comparison >= 0:
-                return True, f"CPU: Cluster has {available} available ({allocatable} allocatable, {used} used), requires {required}"
+                return (
+                    True,
+                    f"CPU: Cluster has {available} available ({allocatable} allocatable, {used} used), requires {required}",
+                )
             else:
-                return False, f"CPU: Insufficient - Cluster has {available} available ({allocatable} allocatable, {used} used), requires {required}"
+                return (
+                    False,
+                    f"CPU: Insufficient - Cluster has {available} available ({allocatable} allocatable, {used} used), requires {required}",
+                )
         else:
             # Fallback to allocatable if usage data unavailable
             comparison = compare_cpu(allocatable, required)
 
             if comparison >= 0:
-                return True, f"CPU: Cluster has {allocatable} allocatable (current usage unknown), requires {required}"
+                return (
+                    True,
+                    f"CPU: Cluster has {allocatable} allocatable (current usage unknown), requires {required}",
+                )
             else:
-                return False, f"CPU: Insufficient - Cluster has {allocatable} allocatable (current usage unknown), requires {required}"
+                return (
+                    False,
+                    f"CPU: Insufficient - Cluster has {allocatable} allocatable (current usage unknown), requires {required}",
+                )
 
     def _check_memory(self, required: str, cluster: Dict) -> Tuple[bool, str]:
         """
@@ -170,29 +185,41 @@ class FeasibilityChecker:
         Returns:
             (is_sufficient, message)
         """
-        nodes_info = cluster.get('nodes', {})
+        nodes_info = cluster.get("nodes", {})
 
         # Prefer available over allocatable
-        available = nodes_info.get('available_memory')
-        allocatable = nodes_info.get('allocatable_memory', '0')
-        used = nodes_info.get('used_memory')
+        available = nodes_info.get("available_memory")
+        allocatable = nodes_info.get("allocatable_memory", "0")
+        used = nodes_info.get("used_memory")
 
         if available is not None:
             # Usage data available - check against available resources
             comparison = compare_memory(available, required)
 
             if comparison >= 0:
-                return True, f"Memory: Cluster has {available} available ({allocatable} allocatable, {used} used), requires {required}"
+                return (
+                    True,
+                    f"Memory: Cluster has {available} available ({allocatable} allocatable, {used} used), requires {required}",
+                )
             else:
-                return False, f"Memory: Insufficient - Cluster has {available} available ({allocatable} allocatable, {used} used), requires {required}"
+                return (
+                    False,
+                    f"Memory: Insufficient - Cluster has {available} available ({allocatable} allocatable, {used} used), requires {required}",
+                )
         else:
             # Fallback to allocatable if usage data unavailable
             comparison = compare_memory(allocatable, required)
 
             if comparison >= 0:
-                return True, f"Memory: Cluster has {allocatable} allocatable (current usage unknown), requires {required}"
+                return (
+                    True,
+                    f"Memory: Cluster has {allocatable} allocatable (current usage unknown), requires {required}",
+                )
             else:
-                return False, f"Memory: Insufficient - Cluster has {allocatable} allocatable (current usage unknown), requires {required}"
+                return (
+                    False,
+                    f"Memory: Insufficient - Cluster has {allocatable} allocatable (current usage unknown), requires {required}",
+                )
 
     def _check_gpu(self, required: Dict, cluster: Dict) -> Tuple[bool, str]:
         """
@@ -205,21 +232,21 @@ class FeasibilityChecker:
         Returns:
             (is_sufficient, message)
         """
-        gpu_info = cluster.get('gpu_resources', {})
-        available_types = gpu_info.get('gpu_types', {})
-        available_models = gpu_info.get('gpu_models', [])
-        total_available = gpu_info.get('total_gpus', 0)
+        gpu_info = cluster.get("gpu_resources", {})
+        available_types = gpu_info.get("gpu_types", {})
+        available_models = gpu_info.get("gpu_models", [])
+        total_available = gpu_info.get("total_gpus", 0)
 
         if not required:
             return True, "GPU: No GPU requirements"
 
         # Extract required model/class if specified
-        required_model = required.get('model')
+        required_model = required.get("model")
 
         # Check each GPU type requirement
         for gpu_type, required_count in required.items():
             # Skip 'model' and 'memory' keys - they're metadata, not resource types
-            if gpu_type in ['model', 'memory']:
+            if gpu_type in ["model", "memory"]:
                 continue
 
             try:
@@ -238,18 +265,23 @@ class FeasibilityChecker:
 
         # Check GPU model/class if specified
         if required_model:
-            model_ok, model_msg = self._check_gpu_model(required_model, available_models)
+            model_ok, model_msg = self._check_gpu_model(
+                required_model, available_models
+            )
             if not model_ok:
                 return False, model_msg
 
             # Check GPU memory if both model and memory are specified
-            required_memory = required.get('memory')
+            required_memory = required.get("memory")
             if required_memory:
-                cluster_gpu_memory_mb = gpu_info.get('gpu_memory_mb')
+                cluster_gpu_memory_mb = gpu_info.get("gpu_memory_mb")
 
                 if cluster_gpu_memory_mb:
                     # Convert required memory to MB
-                    from src.requirements_extractor.utils.resource_comparisons import memory_to_bytes
+                    from src.requirements_extractor.utils.resource_comparisons import (
+                        memory_to_bytes,
+                    )
+
                     required_memory_bytes = memory_to_bytes(required_memory)
                     required_memory_mb = required_memory_bytes / (1024 * 1024)
 
@@ -266,15 +298,21 @@ class FeasibilityChecker:
                 # If GPU memory info not available, just warn (don't fail)
                 # This will be added as a warning in the main check_feasibility method
 
-            return True, f"GPU: Cluster has {total_available} compatible GPU(s) - {model_msg}"
+            return (
+                True,
+                f"GPU: Cluster has {total_available} compatible GPU(s) - {model_msg}",
+            )
 
         # Check GPU memory even without model requirement
-        required_memory = required.get('memory')
+        required_memory = required.get("memory")
         if required_memory:
-            cluster_gpu_memory_mb = gpu_info.get('gpu_memory_mb')
+            cluster_gpu_memory_mb = gpu_info.get("gpu_memory_mb")
 
             if cluster_gpu_memory_mb:
-                from src.requirements_extractor.utils.resource_comparisons import memory_to_bytes
+                from src.requirements_extractor.utils.resource_comparisons import (
+                    memory_to_bytes,
+                )
+
                 required_memory_bytes = memory_to_bytes(required_memory)
                 required_memory_mb = required_memory_bytes / (1024 * 1024)
 
@@ -284,11 +322,19 @@ class FeasibilityChecker:
                         f"({required_memory_mb:.0f}MB), cluster GPUs have {cluster_gpu_memory_mb}MB"
                     )
 
-                return True, f"GPU: Cluster has {total_available} GPU(s) with {cluster_gpu_memory_mb}MB memory"
+                return (
+                    True,
+                    f"GPU: Cluster has {total_available} GPU(s) with {cluster_gpu_memory_mb}MB memory",
+                )
 
-        return True, f"GPU: Cluster has sufficient GPU resources ({total_available} total)"
+        return (
+            True,
+            f"GPU: Cluster has sufficient GPU resources ({total_available} total)",
+        )
 
-    def _check_gpu_model(self, required_model: str, available_models: List[str]) -> Tuple[bool, str]:
+    def _check_gpu_model(
+        self, required_model: str, available_models: List[str]
+    ) -> Tuple[bool, str]:
         """
         Check if available GPU models meet the required class/model.
 
@@ -300,41 +346,65 @@ class FeasibilityChecker:
             (is_compatible, message)
         """
         if not available_models:
-            return False, "GPU Model: Cannot verify - GPU model information not available in cluster"
+            return (
+                False,
+                "GPU Model: Cannot verify - GPU model information not available in cluster",
+            )
 
         required_lower = required_model.lower()
 
         # Define datacenter-class GPU patterns
         datacenter_gpus = {
             # NVIDIA datacenter GPUs
-            'a100', 'a30', 'a40', 'a10',
-            'h100', 'h200',
-            'l4', 'l40', 'l40s',
-            'v100', 'p100', 'p40',
+            "a100",
+            "a30",
+            "a40",
+            "a10",
+            "h100",
+            "h200",
+            "l4",
+            "l40",
+            "l40s",
+            "v100",
+            "p100",
+            "p40",
             # AMD datacenter GPUs
-            'mi250', 'mi210', 'mi100', 'mi300',
+            "mi250",
+            "mi210",
+            "mi100",
+            "mi300",
             # Intel datacenter GPUs
-            'ponte vecchio', 'max',
+            "ponte vecchio",
+            "max",
         }
 
         # Consumer/workstation GPUs that should NOT pass datacenter requirements
         consumer_gpus = {
-            't4',  # entry-level datacenter, often not sufficient for training
-            'rtx', 'gtx',  # consumer cards
-            'quadro',  # workstation cards
-            'titan',  # prosumer cards
+            "t4",  # entry-level datacenter, often not sufficient for training
+            "rtx",
+            "gtx",  # consumer cards
+            "quadro",  # workstation cards
+            "titan",  # prosumer cards
         }
 
         # Check if requirement is for "datacenter-class" or similar generic terms
-        if any(keyword in required_lower for keyword in ['datacenter', 'data center', 'training-class', 'enterprise']):
+        if any(
+            keyword in required_lower
+            for keyword in ["datacenter", "data center", "training-class", "enterprise"]
+        ):
             # Check if any available GPU is datacenter-class
             for available in available_models:
                 available_lower = available.lower()
                 # Check if it matches a datacenter GPU
                 if any(dc_gpu in available_lower for dc_gpu in datacenter_gpus):
-                    return True, f"matches datacenter-class requirement (found: {available})"
+                    return (
+                        True,
+                        f"matches datacenter-class requirement (found: {available})",
+                    )
                 # Reject if it's a consumer GPU
-                if any(consumer_gpu in available_lower for consumer_gpu in consumer_gpus):
+                if any(
+                    consumer_gpu in available_lower for consumer_gpu in consumer_gpus
+                ):
                     continue
 
             return False, (
@@ -346,16 +416,20 @@ class FeasibilityChecker:
         is_newer_requirement = False
         base_requirement = required_lower
 
-        if 'or newer' in required_lower or 'or better' in required_lower:
+        if "or newer" in required_lower or "or better" in required_lower:
             is_newer_requirement = True
-            base_requirement = required_lower.replace('or newer', '').replace('or better', '').strip()
+            base_requirement = (
+                required_lower.replace("or newer", "").replace("or better", "").strip()
+            )
 
         # Split by common separators (but only if not a "newer" requirement)
         required_models = []
         if not is_newer_requirement:
-            for separator in ['/', ',', '|']:
+            for separator in ["/", ",", "|"]:
                 if separator in base_requirement:
-                    required_models = [m.strip() for m in base_requirement.split(separator)]
+                    required_models = [
+                        m.strip() for m in base_requirement.split(separator)
+                    ]
                     break
 
         if not required_models:
@@ -369,10 +443,16 @@ class FeasibilityChecker:
                 # Handle "or newer" patterns first
                 if is_newer_requirement:
                     if self._is_gpu_newer_or_equal(available_lower, req_model):
-                        return True, f"matches '{required_model}' requirement (found: {available})"
+                        return (
+                            True,
+                            f"matches '{required_model}' requirement (found: {available})",
+                        )
                 # Direct match
                 elif req_model in available_lower:
-                    return True, f"matches required model {req_model} (found: {available})"
+                    return (
+                        True,
+                        f"matches required model {req_model} (found: {available})",
+                    )
 
         # No match found
         return False, (
@@ -393,22 +473,22 @@ class FeasibilityChecker:
         """
         # NVIDIA hierarchy (newer → older)
         nvidia_hierarchy = [
-            ['h200'],
-            ['h100'],
-            ['a100', 'a40'],
-            ['a30', 'a10'],
-            ['v100'],
-            ['p100'],
-            ['l40s', 'l40'],
-            ['l4'],
+            ["h200"],
+            ["h100"],
+            ["a100", "a40"],
+            ["a30", "a10"],
+            ["v100"],
+            ["p100"],
+            ["l40s", "l40"],
+            ["l4"],
         ]
 
         # AMD hierarchy
         amd_hierarchy = [
-            ['mi300'],
-            ['mi250'],
-            ['mi210'],
-            ['mi100'],
+            ["mi300"],
+            ["mi250"],
+            ["mi210"],
+            ["mi100"],
         ]
 
         # Find positions in hierarchy
@@ -436,7 +516,9 @@ class FeasibilityChecker:
         # If we can't determine, be conservative
         return False
 
-    def _check_extended_resource(self, resource_type: str, required_count: str, cluster: Dict) -> Tuple[bool, str]:
+    def _check_extended_resource(
+        self, resource_type: str, required_count: str, cluster: Dict
+    ) -> Tuple[bool, str]:
         """
         Check if extended resources (RDMA, FPGA, etc.) are available.
 
@@ -448,11 +530,11 @@ class FeasibilityChecker:
         Returns:
             (is_sufficient, message)
         """
-        nodes_info = cluster.get('nodes', {})
+        nodes_info = cluster.get("nodes", {})
 
         # Try to get extended resources from nodes
         # Extended resources are stored in allocatable_resources or similar
-        extended_resources = nodes_info.get('extended_resources', {})
+        extended_resources = nodes_info.get("extended_resources", {})
 
         try:
             required_count_int = int(required_count)
@@ -462,11 +544,19 @@ class FeasibilityChecker:
         available_count = extended_resources.get(resource_type, 0)
 
         if available_count >= required_count_int:
-            return True, f"Extended Resource ({resource_type}): Cluster has {available_count}, requires {required_count_int}"
+            return (
+                True,
+                f"Extended Resource ({resource_type}): Cluster has {available_count}, requires {required_count_int}",
+            )
         else:
-            return False, f"Extended Resource ({resource_type}): Insufficient - Cluster has {available_count}, requires {required_count_int}"
+            return (
+                False,
+                f"Extended Resource ({resource_type}): Insufficient - Cluster has {available_count}, requires {required_count_int}",
+            )
 
-    def _check_storage(self, required: List[str], cluster: Dict) -> Tuple[bool, List[str]]:
+    def _check_storage(
+        self, required: List[str], cluster: Dict
+    ) -> Tuple[bool, List[str]]:
         """
         Check if storage classes are available.
 
@@ -477,13 +567,13 @@ class FeasibilityChecker:
         Returns:
             (has_storage_classes, messages)
         """
-        storage_classes = cluster.get('storage_classes', [])
+        storage_classes = cluster.get("storage_classes", [])
 
         if not storage_classes:
             return False, ["Storage: No storage classes found in cluster"]
 
         messages = []
-        default_sc = any(sc.get('is_default') for sc in storage_classes)
+        default_sc = any(sc.get("is_default") for sc in storage_classes)
 
         try:
             total_required_gi = sum(parse_storage_size(req) for req in required)
@@ -503,7 +593,9 @@ class FeasibilityChecker:
             )
             return True, messages
 
-    def _check_software(self, required: List[str], cluster: Dict) -> Tuple[bool, List[str]]:
+    def _check_software(
+        self, required: List[str], cluster: Dict
+    ) -> Tuple[bool, List[str]]:
         """
         Check if software prerequisites are installed.
 
@@ -514,8 +606,8 @@ class FeasibilityChecker:
         Returns:
             (all_found, messages)
         """
-        operators = cluster.get('operators', [])
-        crds = cluster.get('crds', [])
+        operators = cluster.get("operators", [])
+        crds = cluster.get("crds", [])
 
         messages = []
 
@@ -527,9 +619,9 @@ class FeasibilityChecker:
             found = False
 
             # Check for GPU-related requirements
-            if 'gpu' in req_lower or 'nvidia' in req_lower:
+            if "gpu" in req_lower or "nvidia" in req_lower:
                 for op in operators:
-                    if any(keyword in op.lower() for keyword in ['gpu', 'nvidia']):
+                    if any(keyword in op.lower() for keyword in ["gpu", "nvidia"]):
                         found = True
                         messages.append(f"Software: GPU operator found ({op})")
                         break
@@ -537,18 +629,22 @@ class FeasibilityChecker:
                 if not found:
                     # Check CRDs as backup
                     for crd in crds:
-                        if 'gpu' in crd.lower() or 'nvidia' in crd.lower():
+                        if "gpu" in crd.lower() or "nvidia" in crd.lower():
                             found = True
                             messages.append(f"Software: GPU-related CRD found ({crd})")
                             break
 
             if not found:
-                messages.append(f"Software: {req} not detected - may need manual installation")
+                messages.append(
+                    f"Software: {req} not detected - may need manual installation"
+                )
 
         # Software is usually a warning, not a blocker
         return True, messages
 
-    def _check_crd_conflicts(self, required_crds: List[Dict], cluster: Dict) -> Tuple[bool, List[str]]:
+    def _check_crd_conflicts(
+        self, required_crds: List[Dict], cluster: Dict
+    ) -> Tuple[bool, List[str]]:
         """
         Check if required CRDs conflict with existing cluster CRDs.
 
@@ -559,7 +655,7 @@ class FeasibilityChecker:
         Returns:
             (no_conflicts, messages)
         """
-        cluster_crds = cluster.get('crds', [])
+        cluster_crds = cluster.get("crds", [])
         messages = []
         has_conflicts = False
 
@@ -568,17 +664,23 @@ class FeasibilityChecker:
 
         # Build a lookup dict for cluster CRDs
         cluster_crd_map = {}
-        if isinstance(cluster_crds, list) and cluster_crds and isinstance(cluster_crds[0], dict):
+        if (
+            isinstance(cluster_crds, list)
+            and cluster_crds
+            and isinstance(cluster_crds[0], dict)
+        ):
             # New format with detailed info
-            cluster_crd_map = {crd['name']: crd for crd in cluster_crds}
+            cluster_crd_map = {crd["name"]: crd for crd in cluster_crds}
         elif isinstance(cluster_crds, list):
             # Old format (just names)
-            cluster_crd_map = {name: {'name': name} for name in cluster_crds if isinstance(name, str)}
+            cluster_crd_map = {
+                name: {"name": name} for name in cluster_crds if isinstance(name, str)
+            }
 
         for req_crd in required_crds:
-            crd_name = req_crd.get('name', '')
-            crd_group = req_crd.get('group', '')
-            crd_versions = req_crd.get('versions', [])
+            crd_name = req_crd.get("name", "")
+            crd_group = req_crd.get("group", "")
+            crd_versions = req_crd.get("versions", [])
 
             if not crd_name:
                 continue
@@ -588,7 +690,7 @@ class FeasibilityChecker:
                 existing = cluster_crd_map[crd_name]
 
                 # Check if it's the same group
-                existing_group = existing.get('group', '')
+                existing_group = existing.get("group", "")
                 if existing_group and crd_group and existing_group != crd_group:
                     messages.append(
                         f"CRD Conflict: {crd_name} - Existing group '{existing_group}' "
@@ -598,7 +700,7 @@ class FeasibilityChecker:
                     continue
 
                 # Check versions
-                existing_versions = existing.get('versions', [])
+                existing_versions = existing.get("versions", [])
                 if existing_versions and crd_versions:
                     # Check if there's any version overlap
                     version_overlap = set(existing_versions) & set(crd_versions)
@@ -617,11 +719,9 @@ class FeasibilityChecker:
                     messages.append(f"CRD: {crd_name} - Already exists in cluster")
 
                 # Check owner if available
-                existing_owner = existing.get('owner')
+                existing_owner = existing.get("owner")
                 if existing_owner:
-                    messages.append(
-                        f"  └─ Managed by: {existing_owner}"
-                    )
+                    messages.append(f"  └─ Managed by: {existing_owner}")
             else:
                 # CRD will be created
                 version_str = f" ({', '.join(crd_versions)})" if crd_versions else ""

@@ -1,15 +1,16 @@
 """
 Simple test script to verify the extraction functionality.
 """
+
 from src.requirements_extractor.extractor import fetch_repo_content
 import json
 
 
 def test_extraction(repo_url: str):
     """Test the extraction on a given repository."""
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"Testing: {repo_url}")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
     result = fetch_repo_content(repo_url)
 
@@ -38,11 +39,11 @@ def test_extraction(repo_url: str):
     if deployment_files:
         for i, file in enumerate(deployment_files[:5], 1):
             print(f"  {i}. {file['path']}")
-            if file.get('parsed_resources'):
-                parsed = file['parsed_resources']
-                if parsed.get('cpu_requests'):
+            if file.get("parsed_resources"):
+                parsed = file["parsed_resources"]
+                if parsed.get("cpu_requests"):
                     print(f"     - CPU: {parsed['cpu_requests']}")
-                if parsed.get('memory_requests'):
+                if parsed.get("memory_requests"):
                     print(f"     - Memory: {parsed['memory_requests']}")
         if len(deployment_files) > 5:
             print(f"  ... and {len(deployment_files) - 5} more files")
@@ -75,7 +76,7 @@ if __name__ == "__main__":
         # "https://github.com/argoproj/argo-cd",  # Has helm charts
         # "https://github.com/bitnami/charts",  # Helm chart repository
         "https://github.com/RHEcosystemAppEng/NeMo-Microservices",
-        "https://github.com/llm-d/llm-d"
+        "https://github.com/llm-d/llm-d",
     ]
 
     for repo in test_repos:
@@ -84,6 +85,6 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"❌ Exception: {e}\n")
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("Testing complete!")
-    print("="*80)
+    print("=" * 80)

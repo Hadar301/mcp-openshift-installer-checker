@@ -1,6 +1,7 @@
 """
 Data models for application requirements using Pydantic.
 """
+
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
@@ -8,10 +9,19 @@ from typing import Optional, List, Dict, Any
 class HardwareRequirement(BaseModel):
     """Hardware requirement specification."""
 
-    cpu: Optional[str] = Field(None, description="CPU requirement (e.g., '4 cores', '8 vCPUs')")
-    memory: Optional[str] = Field(None, description="Memory requirement (e.g., '16GB', '32Gi')")
-    gpu: Optional[str] = Field(None, description="GPU requirement (e.g., '1x NVIDIA A100', 'nvidia.com/gpu: 2')")
-    storage: Optional[str] = Field(None, description="Storage requirement (e.g., '100GB', '1TB SSD')")
+    cpu: Optional[str] = Field(
+        None, description="CPU requirement (e.g., '4 cores', '8 vCPUs')"
+    )
+    memory: Optional[str] = Field(
+        None, description="Memory requirement (e.g., '16GB', '32Gi')"
+    )
+    gpu: Optional[str] = Field(
+        None,
+        description="GPU requirement (e.g., '1x NVIDIA A100', 'nvidia.com/gpu: 2')",
+    )
+    storage: Optional[str] = Field(
+        None, description="Storage requirement (e.g., '100GB', '1TB SSD')"
+    )
     source: str = Field(..., description="Source file where this requirement was found")
 
     def __str__(self) -> str:
@@ -31,8 +41,13 @@ class HardwareRequirement(BaseModel):
 class SoftwareRequirement(BaseModel):
     """Software requirement specification."""
 
-    name: str = Field(..., description="Software/tool name (e.g., 'Kubernetes', 'NVIDIA GPU Operator')")
-    version: Optional[str] = Field(None, description="Version requirement (e.g., '1.25+', '>=23.0.0')")
+    name: str = Field(
+        ...,
+        description="Software/tool name (e.g., 'Kubernetes', 'NVIDIA GPU Operator')",
+    )
+    version: Optional[str] = Field(
+        None, description="Version requirement (e.g., '1.25+', '>=23.0.0')"
+    )
     source: str = Field(..., description="Source file where this requirement was found")
 
     def __str__(self) -> str:
@@ -45,14 +60,18 @@ class SoftwareRequirement(BaseModel):
 class Requirements(BaseModel):
     """Complete application requirements."""
 
-    hardware: List[HardwareRequirement] = Field(default_factory=list, description="Hardware requirements")
-    software: List[SoftwareRequirement] = Field(default_factory=list, description="Software prerequisites")
+    hardware: List[HardwareRequirement] = Field(
+        default_factory=list, description="Hardware requirements"
+    )
+    software: List[SoftwareRequirement] = Field(
+        default_factory=list, description="Software prerequisites"
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary format."""
         return {
             "hardware": [hw.model_dump() for hw in self.hardware],
-            "software": [sw.model_dump() for sw in self.software]
+            "software": [sw.model_dump() for sw in self.software],
         }
 
     def to_table_data(self) -> Dict[str, List[List[str]]]:
@@ -79,10 +98,7 @@ class Requirements(BaseModel):
             version = sw.version if sw.version else "Any"
             software_rows.append([sw.name, version, sw.source])
 
-        return {
-            "hardware": hardware_rows,
-            "software": software_rows
-        }
+        return {"hardware": hardware_rows, "software": software_rows}
 
     def has_requirements(self) -> bool:
         """Check if any requirements were found."""
@@ -97,14 +113,22 @@ class ParsedYAMLResources(BaseModel):
     cpu_limits: Optional[str] = None
     memory_limits: Optional[str] = None
     gpu_requests: Optional[Dict[str, str]] = None
-    gpu_model: Optional[str] = None  # NEW: GPU model/class requirement (e.g., "A100", "datacenter-class")
-    gpu_memory: Optional[str] = None  # NEW: GPU memory requirement (e.g., "24Gi", "16000Mi")
-    extended_resources: Optional[Dict[str, str]] = None  # NEW: Extended resources (RDMA, FPGA, etc.)
+    gpu_model: Optional[str] = (
+        None  # NEW: GPU model/class requirement (e.g., "A100", "datacenter-class")
+    )
+    gpu_memory: Optional[str] = (
+        None  # NEW: GPU memory requirement (e.g., "24Gi", "16000Mi")
+    )
+    extended_resources: Optional[Dict[str, str]] = (
+        None  # NEW: Extended resources (RDMA, FPGA, etc.)
+    )
     storage_requests: List[str] = Field(default_factory=list)
     node_selector: Optional[Dict[str, str]] = None
     tolerations: List[str] = Field(default_factory=list)
     affinity_requirements: List[str] = Field(default_factory=list)
-    has_unresolved_templating: bool = False  # Flag for Helm templating that couldn't be resolved
+    has_unresolved_templating: bool = (
+        False  # Flag for Helm templating that couldn't be resolved
+    )
 
     def to_hardware_requirement(self, source: str) -> Optional[HardwareRequirement]:
         """
@@ -134,11 +158,7 @@ class ParsedYAMLResources(BaseModel):
         # Only create if at least one field is populated
         if cpu or memory or gpu or storage:
             return HardwareRequirement(
-                cpu=cpu,
-                memory=memory,
-                gpu=gpu,
-                storage=storage,
-                source=source
+                cpu=cpu, memory=memory, gpu=gpu, storage=storage, source=source
             )
 
         return None
@@ -167,7 +187,9 @@ class ClusterResources(BaseModel):
     # GPU resources
     total_gpus: int = 0
     gpu_types: Dict[str, int] = Field(default_factory=dict)
-    gpu_models: List[str] = Field(default_factory=list)  # NEW: GPU models detected in cluster
+    gpu_models: List[str] = Field(
+        default_factory=list
+    )  # NEW: GPU models detected in cluster
     nodes_with_gpu: List[str] = Field(default_factory=list)
 
     # Storage
@@ -200,9 +222,13 @@ class FeasibilityCheck(BaseModel):
         lines = []
 
         if self.is_feasible:
-            lines.append(f"✅ Installation appears FEASIBLE (confidence: {self.confidence})")
+            lines.append(
+                f"✅ Installation appears FEASIBLE (confidence: {self.confidence})"
+            )
         else:
-            lines.append(f"❌ Installation appears INFEASIBLE (confidence: {self.confidence})")
+            lines.append(
+                f"❌ Installation appears INFEASIBLE (confidence: {self.confidence})"
+            )
 
         if self.reasons_pass:
             lines.append("\nReasons why installation CAN proceed:")

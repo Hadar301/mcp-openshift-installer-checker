@@ -14,10 +14,10 @@ class YAMLParser:
     """Parses Kubernetes and Helm YAML files to extract resource requirements."""
 
     # Pattern to detect Helm templating
-    HELM_TEMPLATE_PATTERN = re.compile(r'\{\{.*?\}\}', re.DOTALL)
+    HELM_TEMPLATE_PATTERN = re.compile(r"\{\{.*?\}\}", re.DOTALL)
 
     # Pattern to extract .Values references
-    VALUES_REF_PATTERN = re.compile(r'\{\{\s*\.Values\.([a-zA-Z0-9_.]+)\s*\}\}')
+    VALUES_REF_PATTERN = re.compile(r"\{\{\s*\.Values\.([a-zA-Z0-9_.]+)\s*\}\}")
 
     @staticmethod
     def is_kubernetes_manifest(content: str) -> bool:
@@ -87,7 +87,7 @@ class YAMLParser:
         Returns:
             Value at path or None if not found
         """
-        parts = path.split('.')
+        parts = path.split(".")
         current = values
 
         for part in parts:
@@ -113,6 +113,7 @@ class YAMLParser:
         Returns:
             Content with resolved values where possible
         """
+
         def replace_value(match):
             path = match.group(1)
             value = self._get_nested_value(values, path)
@@ -176,7 +177,9 @@ class YAMLParser:
             result.has_unresolved_templating = has_templating
             return result
 
-    def _parse_helm_values(self, documents: List[Dict[str, Any]]) -> ParsedYAMLResources:
+    def _parse_helm_values(
+        self, documents: List[Dict[str, Any]]
+    ) -> ParsedYAMLResources:
         """Parse Helm values.yaml file."""
         result = ParsedYAMLResources()
 
@@ -205,7 +208,9 @@ class YAMLParser:
 
         return result
 
-    def _parse_k8s_workload(self, documents: List[Dict[str, Any]]) -> ParsedYAMLResources:
+    def _parse_k8s_workload(
+        self, documents: List[Dict[str, Any]]
+    ) -> ParsedYAMLResources:
         """Parse Kubernetes workload manifests (Deployment, StatefulSet, DaemonSet)."""
         result = ParsedYAMLResources()
 
@@ -215,7 +220,14 @@ class YAMLParser:
 
             # Check if it's a workload resource
             kind = doc.get("kind", "")
-            if kind not in ["Deployment", "StatefulSet", "DaemonSet", "Pod", "Job", "CronJob"]:
+            if kind not in [
+                "Deployment",
+                "StatefulSet",
+                "DaemonSet",
+                "Pod",
+                "Job",
+                "CronJob",
+            ]:
                 continue
 
             # Extract spec
@@ -286,7 +298,9 @@ class YAMLParser:
 
         return result
 
-    def _parse_k8s_manifest(self, documents: List[Dict[str, Any]]) -> ParsedYAMLResources:
+    def _parse_k8s_manifest(
+        self, documents: List[Dict[str, Any]]
+    ) -> ParsedYAMLResources:
         """Generic parser for any Kubernetes manifest."""
         result = ParsedYAMLResources()
 
@@ -299,7 +313,9 @@ class YAMLParser:
 
         return result
 
-    def _extract_resources_spec(self, resources: Dict[str, Any], result: ParsedYAMLResources):
+    def _extract_resources_spec(
+        self, resources: Dict[str, Any], result: ParsedYAMLResources
+    ):
         """Extract resource requests and limits from a resources spec."""
         if not isinstance(resources, dict):
             return
@@ -373,7 +389,9 @@ class YAMLParser:
                 if isinstance(volume, dict) and "size" in volume:
                     result.storage_requests.append(str(volume["size"]))
 
-    def _extract_scheduling_requirements(self, spec: Dict[str, Any], result: ParsedYAMLResources):
+    def _extract_scheduling_requirements(
+        self, spec: Dict[str, Any], result: ParsedYAMLResources
+    ):
         """Extract nodeSelector, tolerations, and affinity requirements."""
         if not isinstance(spec, dict):
             return

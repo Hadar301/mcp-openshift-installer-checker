@@ -36,8 +36,11 @@ class ClusterScanner:
         for tool in ["oc", "kubectl"]:
             try:
                 result = subprocess.run(
-                    [tool, "version", "--client"], capture_output=True, timeout=5, text=True,
-                    shell=False  # Explicitly set shell=False for safety
+                    [tool, "version", "--client"],
+                    capture_output=True,
+                    timeout=5,
+                    text=True,
+                    shell=False,  # Explicitly set shell=False for safety
                 )
                 if result.returncode == 0:
                     self._cli_tool = tool
@@ -50,126 +53,136 @@ class ClusterScanner:
     def _validate_command_args(self, args: List[str]) -> bool:
         """
         Validate command arguments to prevent command injection.
-        
+
         Args:
             args: List of command arguments to validate
-            
+
         Returns:
             True if arguments are safe, False otherwise
         """
         # Define allowed commands and their valid arguments
         allowed_commands = {
-            'get': {
-                'valid_resources': {
-                    'nodes', 'storageclass', 'crd', 'clusterserviceversion',
-                    'pods', 'services', 'deployments', 'configmaps', 'secrets'
+            "get": {
+                "valid_resources": {
+                    "nodes",
+                    "storageclass",
+                    "crd",
+                    "clusterserviceversion",
+                    "pods",
+                    "services",
+                    "deployments",
+                    "configmaps",
+                    "secrets",
                 },
-                'valid_flags': {'-o', '-A', '--no-headers', '-n', '--namespace', '-l', '--selector'}
+                "valid_flags": {
+                    "-o",
+                    "-A",
+                    "--no-headers",
+                    "-n",
+                    "--namespace",
+                    "-l",
+                    "--selector",
+                },
             },
-            'top': {
-                'valid_resources': {'nodes'},
-                'valid_flags': {'--no-headers'}
-            },
-            'adm': {
-                'valid_subcommands': {'top'},
-                'valid_flags': {'--no-headers'}
-            },
-            'cluster-info': {
-                'valid_flags': set()
-            },
-            'version': {
-                'valid_flags': {'--client', '--short'}
-            }
+            "top": {"valid_resources": {"nodes"}, "valid_flags": {"--no-headers"}},
+            "adm": {"valid_subcommands": {"top"}, "valid_flags": {"--no-headers"}},
+            "cluster-info": {"valid_flags": set()},
+            "version": {"valid_flags": {"--client", "--short"}},
         }
-        
+
         if not args:
             return False
-        
+
         # Type safety: ensure all args are strings
         if not all(isinstance(arg, str) for arg in args):
             return False
-            
+
         # Check for dangerous patterns
         dangerous_patterns = [
-            r'[;&|`$()]',  # Command separators and special chars
-            r'\$\(',       # Command substitution
-            r'`[^`]*`',    # Backtick execution
-            r'\.\.',       # Directory traversal
-            r'\s',         # Spaces (could indicate multiple commands)
+            r"[;&|`$()]",  # Command separators and special chars
+            r"\$\(",  # Command substitution
+            r"`[^`]*`",  # Backtick execution
+            r"\.\.",  # Directory traversal
+            r"\s",  # Spaces (could indicate multiple commands)
         ]
-        
+
         for arg in args:
             for pattern in dangerous_patterns:
                 if re.search(pattern, arg):
                     return False
-        
+
         # Validate specific command structure
         if args[0] in allowed_commands:
             cmd_config = allowed_commands[args[0]]
-            
+
             # For 'get' command, validate resource and flags
-            if args[0] == 'get':
+            if args[0] == "get":
                 if len(args) < 2:
                     return False
-                    
+
                 resource = args[1]
-                if resource not in cmd_config['valid_resources']:
+                if resource not in cmd_config["valid_resources"]:
                     return False
-                
+
                 # Validate remaining arguments are flags
                 i = 2
                 while i < len(args):
                     arg = args[i]
-                    if arg.startswith('-'):
-                        flag_name = arg.split('=')[0]
-                        if flag_name not in cmd_config['valid_flags']:
+                    if arg.startswith("-"):
+                        flag_name = arg.split("=")[0]
+                        if flag_name not in cmd_config["valid_flags"]:
                             return False
-                        
+
                         # Special handling for flags that take values
-                        if flag_name in ['-l', '--selector', '-n', '--namespace'] and i + 1 < len(args):
+                        if flag_name in [
+                            "-l",
+                            "--selector",
+                            "-n",
+                            "--namespace",
+                        ] and i + 1 < len(args):
                             # Allow safe characters in selector values (key=value format)
                             selector_value = args[i + 1]
-                            if not re.match(r'^[a-zA-Z0-9._/=-]+$', selector_value):
+                            if not re.match(r"^[a-zA-Z0-9._/=-]+$", selector_value):
                                 return False
                             i += 2  # Skip the value
-                        elif flag_name in ['-o'] and i + 1 < len(args):
+                        elif flag_name in ["-o"] and i + 1 < len(args):
                             # Allow safe characters in output format
                             output_value = args[i + 1]
-                            if not re.match(r'^[a-zA-Z0-9._=]+$', output_value):
+                            if not re.match(r"^[a-zA-Z0-9._=]+$", output_value):
                                 return False
                             i += 2  # Skip the value
                         else:
                             i += 1
                     else:
                         # Non-flag arguments (like resource names) should be safe
-                        if not re.match(r'^[a-zA-Z0-9._-]+$', arg):
+                        if not re.match(r"^[a-zA-Z0-9._-]+$", arg):
                             return False
                         i += 1
-            
+
             # For 'top' command
-            elif args[0] == 'top':
+            elif args[0] == "top":
                 if len(args) < 2:
                     return False
-                if args[1] not in cmd_config['valid_resources']:
+                if args[1] not in cmd_config["valid_resources"]:
                     return False
                 for arg in args[2:]:
-                    if arg.startswith('-') and arg not in cmd_config['valid_flags']:
+                    if arg.startswith("-") and arg not in cmd_config["valid_flags"]:
                         return False
-            
+
             # For 'adm' command (OpenShift specific)
-            elif args[0] == 'adm':
-                if len(args) < 2 or args[1] not in cmd_config['valid_subcommands']:
+            elif args[0] == "adm":
+                if len(args) < 2 or args[1] not in cmd_config["valid_subcommands"]:
                     return False
                 for arg in args[2:]:
-                    if arg.startswith('-') and arg not in cmd_config['valid_flags']:
+                    if arg.startswith("-") and arg not in cmd_config["valid_flags"]:
                         return False
-            
+
             # For simple commands like 'cluster-info', 'version'
             else:
                 for arg in args[1:]:
-                    if arg.startswith('-') and arg not in cmd_config['valid_flags']:
+                    if arg.startswith("-") and arg not in cmd_config["valid_flags"]:
                         return False
-        
+
         return True
 
     def _run_command(self, args: List[str], timeout: int = 10) -> Optional[Dict]:
@@ -196,12 +209,12 @@ class ClusterScanner:
             cmd = [self._cli_tool] + args
 
             result = subprocess.run(
-                cmd, 
-                capture_output=True, 
-                timeout=timeout, 
+                cmd,
+                capture_output=True,
+                timeout=timeout,
                 text=True,
                 # Never use shell=True to prevent injection
-                shell=False
+                shell=False,
             )
 
             if result.returncode != 0:
@@ -229,11 +242,14 @@ class ClusterScanner:
         # Try a simple command that should always work if connected
         if not self._validate_command_args(["cluster-info"]):
             return False
-            
+
         try:
             result = subprocess.run(
-                [self._cli_tool, "cluster-info"], capture_output=True, timeout=5, text=True,
-                shell=False  # Explicitly set shell=False for safety
+                [self._cli_tool, "cluster-info"],
+                capture_output=True,
+                timeout=5,
+                text=True,
+                shell=False,  # Explicitly set shell=False for safety
             )
             return result.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
@@ -253,7 +269,9 @@ class ClusterScanner:
         nodes_data_raw = self._run_command(["get", "nodes", "-o", "json"])
 
         # Scan all cluster components (reusing nodes_data where possible)
-        nodes_info = self._scan_nodes()  # Note: _scan_nodes() fetches its own data currently
+        nodes_info = (
+            self._scan_nodes()
+        )  # Note: _scan_nodes() fetches its own data currently
         gpu_info = self._scan_gpu_resources(nodes_data_raw)  # Reuse nodes data
         storage_classes = self._scan_storage_classes()
         operators = self._scan_installed_operators()
@@ -280,7 +298,9 @@ class ClusterScanner:
             "cli_tool": self._cli_tool,
         }
 
-    def scan_cluster_targeted(self, requirements: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def scan_cluster_targeted(
+        self, requirements: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
         """
         Targeted cluster scan: Only fetch resources needed to validate requirements.
 
@@ -305,18 +325,18 @@ class ClusterScanner:
         if not self.is_cluster_available():
             return None
 
-        hardware = requirements.get('hardware', {})
+        hardware = requirements.get("hardware", {})
         result = {}
 
         # Check if we have ANY requirements at all
         has_any_requirements = (
-            hardware.get('cpu') or
-            hardware.get('memory') or
-            hardware.get('gpu') or
-            hardware.get('extended_resources') or
-            hardware.get('storage') or
-            requirements.get('software_inferred') or
-            requirements.get('required_crds')
+            hardware.get("cpu")
+            or hardware.get("memory")
+            or hardware.get("gpu")
+            or hardware.get("extended_resources")
+            or hardware.get("storage")
+            or requirements.get("software_inferred")
+            or requirements.get("required_crds")
         )
 
         # If NO requirements found (e.g., YAML parsing failed), do basic scan
@@ -330,10 +350,10 @@ class ClusterScanner:
 
         # Always scan nodes if ANY hardware requirement exists
         needs_nodes = (
-            hardware.get('cpu') or
-            hardware.get('memory') or
-            hardware.get('gpu') or
-            hardware.get('extended_resources')
+            hardware.get("cpu")
+            or hardware.get("memory")
+            or hardware.get("gpu")
+            or hardware.get("extended_resources")
         )
 
         # Always fetch nodes data (needed for GPU scanning which we always do)
@@ -343,9 +363,11 @@ class ClusterScanner:
             nodes_info = self._scan_nodes()  # Note: currently fetches its own data
 
             # Only fetch usage if we need accurate availability
-            if hardware.get('cpu') or hardware.get('memory'):
+            if hardware.get("cpu") or hardware.get("memory"):
                 usage_info = self._scan_resource_usage()
-                available_info = self._calculate_available_resources(nodes_info, usage_info)
+                available_info = self._calculate_available_resources(
+                    nodes_info, usage_info
+                )
                 nodes_info.update(available_info)
                 nodes_info["resource_usage"] = usage_info
 
@@ -355,12 +377,12 @@ class ClusterScanner:
         result["gpu_resources"] = self._scan_gpu_resources(nodes_data_raw)
 
         # Scan storage only if storage requirement exists
-        if hardware.get('storage'):
+        if hardware.get("storage"):
             result["storage_classes"] = self._scan_storage_classes()
 
         # Scan operators/CRDs only if software or CRD requirements exist
-        software_reqs = requirements.get('software_inferred', [])
-        crd_reqs = requirements.get('required_crds', [])
+        software_reqs = requirements.get("software_inferred", [])
+        crd_reqs = requirements.get("required_crds", [])
 
         if software_reqs:
             result["operators"] = self._scan_installed_operators()
@@ -420,13 +442,18 @@ class ClusterScanner:
             status = "Unknown"
             for condition in conditions:
                 if condition.get("type") == "Ready":
-                    status = "Ready" if condition.get("status") == "True" else "NotReady"
+                    status = (
+                        "Ready" if condition.get("status") == "True" else "NotReady"
+                    )
 
             nodes.append(
                 {
                     "name": node["metadata"]["name"],
                     "capacity": {"cpu": cpu_capacity, "memory": memory_capacity},
-                    "allocatable": {"cpu": cpu_allocatable, "memory": memory_allocatable},
+                    "allocatable": {
+                        "cpu": cpu_allocatable,
+                        "memory": memory_allocatable,
+                    },
                     "status": status,
                 }
             )
@@ -488,7 +515,13 @@ class ClusterScanner:
             nodes_data = self._run_command(["get", "nodes", "-o", "json"])
 
         if not nodes_data:
-            return {"total_gpus": 0, "gpu_types": {}, "gpu_models": [], "gpu_memory_mb": None, "nodes_with_gpu": []}
+            return {
+                "total_gpus": 0,
+                "gpu_types": {},
+                "gpu_models": [],
+                "gpu_memory_mb": None,
+                "nodes_with_gpu": [],
+            }
 
         total_gpus = 0
         gpu_types = {}
@@ -516,9 +549,9 @@ class ClusterScanner:
                         # AMD labels: amd.com/gpu.device-id
                         gpu_model = None
                         if gpu_key == "nvidia.com/gpu":
-                            gpu_model = labels.get("nvidia.com/gpu.product") or labels.get(
-                                "nvidia.com/gpu.family"
-                            )
+                            gpu_model = labels.get(
+                                "nvidia.com/gpu.product"
+                            ) or labels.get("nvidia.com/gpu.family")
                         elif gpu_key == "amd.com/gpu":
                             gpu_model = labels.get("amd.com/gpu.device-id")
                         elif gpu_key == "intel.com/gpu":
@@ -557,7 +590,9 @@ class ClusterScanner:
         if self._cli_tool != "oc":
             return []
 
-        csv_data = self._run_command(["get", "clusterserviceversion", "-A", "-o", "json"])
+        csv_data = self._run_command(
+            ["get", "clusterserviceversion", "-A", "-o", "json"]
+        )
         if not csv_data:
             return []
 
@@ -602,7 +637,9 @@ class ClusterScanner:
             elif "app.kubernetes.io/managed-by" in labels:
                 owner = labels["app.kubernetes.io/managed-by"]
 
-            crds.append({"name": name, "group": group, "versions": versions, "owner": owner})
+            crds.append(
+                {"name": name, "group": group, "versions": versions, "owner": owner}
+            )
 
         return crds
 
@@ -630,11 +667,14 @@ class ClusterScanner:
         # Validate command args first
         if not self._validate_command_args(cmd):
             return {"available": False, "reason": "Invalid command arguments"}
-            
+
         try:
             result = subprocess.run(
-                [self._cli_tool] + cmd, capture_output=True, timeout=10, text=True,
-                shell=False  # Explicitly set shell=False for safety
+                [self._cli_tool] + cmd,
+                capture_output=True,
+                timeout=10,
+                text=True,
+                shell=False,  # Explicitly set shell=False for safety
             )
 
             if result.returncode != 0:
@@ -686,7 +726,9 @@ class ClusterScanner:
             return {
                 "available": True,
                 "nodes": nodes_usage,
-                "total_cpu_used": millicores_to_human_readable(total_cpu_used_millicores),
+                "total_cpu_used": millicores_to_human_readable(
+                    total_cpu_used_millicores
+                ),
                 "total_memory_used": bytes_to_human_readable(total_memory_used_bytes),
             }
 
@@ -735,7 +777,9 @@ class ClusterScanner:
         used_memory_bytes = memory_to_bytes(used_memory)
 
         # Calculate available (allocatable - used)
-        available_cpu_millicores = max(0, allocatable_cpu_millicores - used_cpu_millicores)
+        available_cpu_millicores = max(
+            0, allocatable_cpu_millicores - used_cpu_millicores
+        )
         available_memory_bytes = max(0, allocatable_memory_bytes - used_memory_bytes)
 
         # Calculate usage percentages
