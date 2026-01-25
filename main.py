@@ -168,6 +168,13 @@ def check_feasibility(repo_url: str) -> dict:
         - instructions_for_llm: Guidance for the LLM on how to analyze the data
         - final decision: Bool are all the requirements for hardware software and drivers met by the cluster? 
 
+    IMPORTANT - OUTPUT FORMATTING RULES:
+        When presenting results, you MUST follow this format:
+        1. Summarize all the requirements against the cluster's available resources in a table
+        2. Consider every kind of deployment and don't group into categories
+        3. Provide a final yes/no answer for every kind of installation, along with a final summary
+        4. Don't add any instructions on how to install
+    
     Example:
         >>> check_feasibility("https://github.com/kubernetes/kubernetes")
         {
