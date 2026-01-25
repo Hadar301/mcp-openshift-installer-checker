@@ -5,7 +5,7 @@ This module compares extracted application requirements against cluster capacity
 to determine if the application can be installed successfully.
 """
 
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from src.requirements_extractor.models.requirements import FeasibilityCheck
 from src.requirements_extractor.utils.resource_comparisons import (

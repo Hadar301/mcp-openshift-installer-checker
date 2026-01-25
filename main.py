@@ -6,6 +6,7 @@ and helps determine if an application can be installed on an OpenShift/K8s clust
 """
 
 from mcp.server.fastmcp import FastMCP
+
 from src.requirements_extractor.extractor import RequirementsExtractor
 
 # Initialize the MCP server

@@ -2,8 +2,9 @@
 Test script for cluster usage tracking functionality.
 """
 
-from src.cluster_analyzer.scanner import ClusterScanner
 import json
+
+from src.cluster_analyzer.scanner import ClusterScanner
 
 
 def test_usage_tracking():
