@@ -157,34 +157,69 @@ def check_feasibility(repo_url: str) -> dict:
                   - https://gitlab.com/project/repo
 
     Returns:
-        Dictionary containing:
-        - success: Boolean indicating if the operation was successful
-        - repo_info: Repository metadata (platform, owner, repo name)
-        - readme_content: README text for LLM to analyze
-        - deployment_files: List of deployment YAML files with content and parsed resources
-        - yaml_extracted_requirements: Summary of requirements found in YAML files
-        - cluster_info: Cluster resource information (if cluster is available)
-        - feasibility_check: Detailed feasibility analysis (if cluster is available)
-        - instructions_for_llm: Guidance for the LLM on how to analyze the data
-        - final decision: Bool are all the requirements for hardware software and drivers met by the cluster? 
+        Dictionary with the following keys:
 
-    IMPORTANT - OUTPUT FORMATTING RULES:
-        When presenting results, you MUST follow this format:
-        1. Summarize all the requirements against the cluster's available resources in a table
-        2. Consider every kind of deployment and don't group into categories
-        3. Provide a final yes/no answer for every kind of installation, along with a final summary
-        4. Don't add any instructions on how to install
-    
-    Example:
-        >>> check_feasibility("https://github.com/kubernetes/kubernetes")
+        - success (bool): Always check this first! If False, check the 'error' field.
+
+        - _summary (dict): **READ THIS FIRST!** Quick overview with:
+          - readme_found (bool): True if README exists with substantial content
+          - readme_length_chars (int): Character count of all markdown files
+          - deployment_files_count (int): Number of K8s/Helm files found
+          - deployment_file_paths (list): First 10 deployment file paths
+          - has_cluster_info (bool): Whether cluster scan succeeded
+          - has_feasibility_check (bool): Whether feasibility analysis is available
+
+        - readme_content (str): Combined content of ALL markdown files from the repository.
+          This field will ALWAYS be populated (may say "No README found" if truly empty).
+          Length typically 10,000-500,000 chars for real projects.
+
+        - deployment_files (list): List of Kubernetes/Helm YAML files found.
+          Each item has: {"path": "...", "content": "...", "parsed_resources": {...}}
+          This list will contain 0+ items. Empty list means no K8s manifests found.
+
+        - yaml_extracted_requirements (dict): Structured requirements from YAML parsing.
+          Contains hardware/software/CRD requirements extracted automatically.
+
+        - cluster_info (dict|null): Cluster scan results (nodes, GPUs, storage, etc.).
+          Will be null if cluster not accessible.
+
+        - feasibility_check (dict|null): Detailed YES/NO analysis comparing repo vs cluster.
+          Will be null if cluster not accessible.
+
+        - instructions_for_llm (str): Read this! It contains important context and warnings.
+
+    CRITICAL - HOW TO USE THE RESPONSE:
+        1. CHECK 'success' field first
+        2. **READ '_summary' FIELD** - it shows what data is available at a glance
+        3. Use _summary.readme_found to determine if README exists
+        4. Use _summary.deployment_files_count to see how many K8s files were found
+        5. READ 'readme_content' - it contains all documentation (README, guides, etc.)
+        6. CHECK 'deployment_files' - if empty, repo may not have K8s manifests
+        7. READ 'instructions_for_llm' - it has important warnings and cluster info
+        8. USE 'feasibility_check' for automated comparison results
+        9. NEVER say "no README" if _summary.readme_found is True
+        10. NEVER say "no deployment files" if _summary.deployment_files_count > 0
+
+    OUTPUT FORMATTING RULES:
+        1. Summarize all requirements vs cluster resources in a table
+        2. Consider every deployment option (don't group into categories)
+        3. Provide final YES/NO answer for each installation type
+        4. Don't add installation instructions
+
+    Example response structure:
         {
             "success": True,
-            "repo_info": {...},
-            "readme_content": "# Kubernetes...",
-            "deployment_files": [...],
-            "yaml_extracted_requirements": {...},
-            "cluster_info": {...},
-            "feasibility_check": {...}
+            "readme_content": "# MyApp\n\n[12,000+ chars of documentation]...",
+            "deployment_files": [
+                {"path": "helm/values.yaml", "content": "...", "parsed_resources": {...}},
+                {"path": "k8s/deployment.yaml", "content": "...", "parsed_resources": {...}}
+            ],
+            "yaml_extracted_requirements": {
+                "hardware": {"cpu": "4", "memory": "8Gi", "gpu": {"nvidia.com/gpu": "1"}},
+                "software_inferred": ["NVIDIA GPU Operator"]
+            },
+            "cluster_info": {"nodes": {...}, "gpu_resources": {...}},
+            "feasibility_check": {"can_install": False, "reasons": [...]}
         }
     """
     extractor = RequirementsExtractor()
