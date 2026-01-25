@@ -24,6 +24,38 @@ class YAMLParser:
     # Pattern to extract .Values references
     VALUES_REF_PATTERN = re.compile(r'\{\{\s*\.Values\.([a-zA-Z0-9_.]+)\s*\}\}')
 
+    @staticmethod
+    def is_kubernetes_manifest(content: str) -> bool:
+        """
+        Check if YAML content contains valid Kubernetes API objects.
+
+        Args:
+            content: YAML file content as string
+
+        Returns:
+            True if content contains at least one object with apiVersion and kind fields
+        """
+        try:
+            documents = list(yaml.safe_load_all(content))
+
+            for doc in documents:
+                if not doc or not isinstance(doc, dict):
+                    continue
+
+                # Check for Kubernetes API object markers
+                has_api_version = "apiVersion" in doc
+                has_kind = "kind" in doc
+
+                if has_api_version and has_kind:
+                    return True
+
+            # Special case: values.yaml files are valid deployment files
+            # even though they don't have apiVersion/kind
+            return False
+
+        except yaml.YAMLError:
+            return False
+
     def _detect_helm_templating(self, content: str) -> bool:
         """
         Check if content contains unresolved Helm templating.

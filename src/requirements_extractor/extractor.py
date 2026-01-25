@@ -17,8 +17,10 @@ from src.requirements_extractor.utils.resource_comparisons import compare_cpu, c
 logger.remove()
 logger.add(sys.stderr, level="INFO")
 
-# Load environment variables
-load_dotenv()
+# Don't load .env file - rely on MCP config to provide environment variables
+# If running outside MCP, users can set GITHUB_TOKEN in their shell environment
+# load_dotenv() is commented out to avoid any conflicts with MCP-provided env vars
+# load_dotenv(override=False)
 
 
 class RequirementsExtractor:
@@ -89,6 +91,10 @@ class RequirementsExtractor:
         github_token = os.getenv("GITHUB_TOKEN")
         gitlab_token = os.getenv("GITLAB_TOKEN")
 
+        logger.debug(f"Environment GITHUB_TOKEN: {'SET' if github_token else 'NOT SET'}")
+        if github_token:
+            logger.debug(f"Token length: {len(github_token)}, prefix: {github_token[:10] if len(github_token) > 10 else 'TOO SHORT'}...")
+
         self.git_handler = GitRepoHandler(github_token=github_token, gitlab_token=gitlab_token)
         self.yaml_parser = YAMLParser()
 
@@ -148,6 +154,12 @@ class RequirementsExtractor:
             for file_info in deployment_files:
                 file_path = file_info["path"]
                 content = file_info["content"]
+
+                # Skip files that don't contain Kubernetes objects (unless they're values.yaml or Chart.yaml)
+                is_helm_file = file_path.endswith("values.yaml") or file_path.endswith("Chart.yaml")
+                if not is_helm_file and not self.yaml_parser.is_kubernetes_manifest(content):
+                    logger.info(f"Skipping {file_path} - not a Kubernetes manifest")
+                    continue
 
                 # Get values.yaml content for this file's chart (if available)
                 chart_values = file_to_values.get(file_path)
@@ -214,6 +226,14 @@ class RequirementsExtractor:
             # Return all the data for the MCP client (Claude/Cursor) to analyze
             return {
                 "success": True,
+                "_summary": {
+                    "readme_found": bool(readme_content and len(readme_content) > 100),
+                    "readme_length_chars": len(readme_content) if readme_content else 0,
+                    "deployment_files_count": len(yaml_files_with_parsed),
+                    "deployment_file_paths": [f["path"] for f in yaml_files_with_parsed[:10]],
+                    "has_cluster_info": cluster_info is not None,
+                    "has_feasibility_check": feasibility_check is not None,
+                },
                 "repo_info": {"url": repo_url, "platform": platform, "owner": owner, "repo": repo},
                 "readme_content": readme_content or "No README found",
                 "deployment_files": yaml_files_with_parsed,
@@ -516,6 +536,12 @@ class RequirementsExtractor:
                 file_path = file_info["path"]
                 content = file_info["content"]
 
+                # Skip files that don't contain Kubernetes objects (unless they're values.yaml or Chart.yaml)
+                is_helm_file = file_path.endswith("values.yaml") or file_path.endswith("Chart.yaml")
+                if not is_helm_file and not self.yaml_parser.is_kubernetes_manifest(content):
+                    logger.info(f"Skipping {file_path} - not a Kubernetes manifest")
+                    continue
+
                 # Get values.yaml content for this file's chart (if available)
                 chart_values = file_to_values.get(file_path)
 
@@ -545,6 +571,12 @@ class RequirementsExtractor:
             # Return WITHOUT cluster info or feasibility check
             return {
                 "success": True,
+                "_summary": {
+                    "readme_found": bool(readme_content and len(readme_content) > 100),
+                    "readme_length_chars": len(readme_content) if readme_content else 0,
+                    "deployment_files_count": len(yaml_files_with_parsed),
+                    "deployment_file_paths": [f["path"] for f in yaml_files_with_parsed[:10]],
+                },
                 "repo_info": {"url": repo_url, "platform": platform, "owner": owner, "repo": repo},
                 "readme_content": readme_content or "No README found",
                 "deployment_files": yaml_files_with_parsed,

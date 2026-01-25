@@ -53,6 +53,9 @@ class GitRepoHandler:
         """
         self.github_token = github_token
         self.gitlab_token = gitlab_token
+        logger.debug(f"GitRepoHandler initialized with github_token: {'SET' if github_token else 'NOT SET'}")
+        if github_token:
+            logger.debug(f"GitHub token prefix: {github_token[:10]}...")
 
     def parse_repo_url(self, url: str) -> Tuple[str, str, str]:
         """
@@ -185,6 +188,7 @@ class GitRepoHandler:
         Returns:
             List of file paths
         """
+        logger.info(f"Fetching file tree for {owner}/{repo}")
         # Try main branch first, then master
         for branch in ["main", "master"]:
             url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
@@ -194,14 +198,20 @@ class GitRepoHandler:
                 headers["Authorization"] = f"token {self.github_token}"
 
             try:
+                logger.info(f"Trying branch '{branch}' at URL: {url}")
                 response = requests.get(url, headers=headers, timeout=15)
+                logger.info(f"Response status: {response.status_code}")
+
                 if response.status_code == 404:
+                    logger.info(f"Branch '{branch}' not found, trying next...")
                     continue  # Try next branch
 
                 response.raise_for_status()
                 data = response.json()
 
                 tree = data.get("tree", [])
+                logger.info(f"Got {len(tree)} total items in tree")
+
                 # Filter for files only (not directories) and YAML/Markdown files
                 file_paths = [
                     item["path"]
@@ -209,12 +219,14 @@ class GitRepoHandler:
                     if item["type"] == "blob"
                     and (item["path"].endswith(".yaml") or item["path"].endswith(".yml") or item["path"].endswith(".md"))
                 ]
+                logger.info(f"Found {len(file_paths)} YAML/Markdown files")
                 return file_paths
 
             except requests.RequestException as e:
-                logger.info(f"Warning: Could not fetch file tree from branch {branch}: {e}")
+                logger.error(f"Error fetching file tree from branch {branch}: {e}")
                 continue
 
+        logger.warning(f"Could not fetch file tree for {owner}/{repo} - no valid branch found")
         return []
 
     def _get_files_from_common_paths(self, owner: str, repo: str, platform: str) -> List[str]:
@@ -247,22 +259,37 @@ class GitRepoHandler:
         return file_paths
 
     def _is_deployment_file(self, file_path: str) -> bool:
-        """Check if a file path matches deployment file patterns."""
+        """
+        Check if a file path matches deployment file patterns.
+
+        Accepts files in deployment-related directories or with common deployment names.
+        The actual Kubernetes object validation happens during parsing.
+        """
         file_name = file_path.split("/")[-1]
 
-        # Check exact matches
+        # Skip non-YAML files
+        if not (file_name.endswith(".yaml") or file_name.endswith(".yml")):
+            return False
+
+        # Accept all YAML files from known deployment directories
+        path_lower = file_path.lower()
+        deployment_dirs = ["helm", "deploy", "k8s", "manifests", "charts", "operators",
+                          "deployment", "kubernetes", "openshift", "config", "kustomize"]
+
+        if any(f"/{dir}/" in path_lower or path_lower.startswith(f"{dir}/") for dir in deployment_dirs):
+            return True
+
+        # Check exact matches for common deployment file names
         if file_name in self.DEPLOYMENT_FILE_PATTERNS:
             return True
 
-        # Check pattern matches (e.g., *.crd.yaml)
-        if (
-            file_name.endswith(".crd.yaml")
-            or file_name.endswith(".yaml")
-            or file_name.endswith(".yml")
-        ):
-            # Look for common keywords in filename
-            keywords = ["deploy", "stateful", "daemon", "config", "kustomize", "helm", "operator"]
-            return any(keyword in file_name.lower() for keyword in keywords)
+        # Accept files with common deployment-related keywords in filename
+        keywords = ["deploy", "stateful", "daemon", "config", "kustomize", "helm",
+                   "operator", "service", "ingress", "networkpolicy", "pvc", "pod",
+                   "job", "cronjob", "secret", "role", "route", "hpa", "application"]
+
+        if any(keyword in file_name.lower() for keyword in keywords):
+            return True
 
         return False
 
