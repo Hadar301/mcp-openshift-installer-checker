@@ -169,53 +169,6 @@ Then edit `~/.cursor/mcp.json`:
 
 Then ask in Cursor chat: "Analyze installation requirements for https://github.com/your/repo and check if it can be installed"
 
-### As a Standalone Python Module
-
-```python
-from src.requirements_extractor.extractor import RequirementsExtractor
-from src.cluster_analyzer.scanner import ClusterScanner
-from src.cluster_checker.feasibility import FeasibilityChecker
-
-extractor = RequirementsExtractor()
-
-# Option 1: Just analyze repository requirements (no cluster needed)
-result = extractor.fetch_repo_content_only("https://github.com/kubernetes/kubernetes")
-if result["success"]:
-    print(f"Requirements: {result['yaml_extracted_requirements']}")
-
-# Option 2: Full feasibility check (requires cluster connection)
-result = extractor.check_feasibility_full("https://github.com/kubernetes/kubernetes")
-if result["success"]:
-    print(f"Requirements: {result['yaml_extracted_requirements']}")
-    if result.get('feasibility_check'):
-        print(f"Can install: {result['feasibility_check']['is_feasible']}")
-
-# Option 3: Just scan cluster
-scanner = ClusterScanner()
-if scanner.is_cluster_available():
-    cluster_info = scanner.scan_cluster()
-    print(f"Cluster has {cluster_info['nodes']['total_nodes']} nodes")
-```
-
-### Testing
-
-Run the comprehensive test suite:
-
-```bash
-# Test CRD detection
-PYTHONPATH=. uv run python test/test_crd_detection.py
-
-# Test GPU model validation
-PYTHONPATH=. uv run python test/test_gpu_model_validation.py
-```
-
-### Debugging with MCP Inspector
-
-```bash
-npx @modelcontextprotocol/inspector uv run python main.py
-```
-
-This opens a web UI where you can test the MCP tools manually.
 
 ## How It Works
 
@@ -257,210 +210,40 @@ Returns structured data for Claude/Cursor to analyze and present to user
 mcp-openshift-installer-checker/
 ├── main.py                                    # MCP server entry point
 ├── .env.example                               # Example environment variables
+├── pyproject.toml                             # Project dependencies (uv)
+├── uv.lock                                    # Dependency lock file
+├── LICENSE                                    # MIT license
+├── README.md                                  # This file
 ├── src/
+│   ├── __init__.py
 │   ├── cluster_analyzer/
 │   │   ├── scanner.py                        # Cluster resource scanner (with targeted scanning)
 │   │   └── __init__.py
 │   ├── cluster_checker/
 │   │   ├── feasibility.py                    # Requirement validation (with GPU memory checks)
 │   │   └── __init__.py
-│   ├── requirements_extractor/
-│   │   ├── extractor.py                      # Main orchestrator
-│   │   ├── git_handler.py                    # GitHub/GitLab API client
-│   │   ├── parser/
-│   │   │   ├── yaml_parser.py               # YAML resource extraction
-│   │   │   └── __init__.py
-│   │   ├── models/
-│   │   │   ├── requirements.py              # Pydantic data models
-│   │   │   └── __init__.py
-│   │   └── utils/
-│   │       └── resource_comparisons.py      # CPU/memory comparison utilities
-├── test/
-│   ├── test_crd_detection.py                # CRD conflict detection tests
-│   └── test_gpu_model_validation.py         # GPU model validation tests
-├── GPU_VALIDATION_SUMMARY.md                # GPU validation documentation
-└── README.md
+│   └── requirements_extractor/
+│       ├── extractor.py                      # Main orchestrator
+│       ├── git_handler.py                    # GitHub/GitLab API client
+│       ├── __init__.py
+│       ├── parser/
+│       │   ├── yaml_parser.py               # YAML resource extraction
+│       │   └── __init__.py
+│       ├── models/
+│       │   ├── requirements.py              # Pydantic data models
+│       │   └── __init__.py
+│       └── utils/
+│           ├── resource_comparisons.py      # CPU/memory comparison utilities
+│           └── __init__.py
+└── test/
+    ├── test_crd_detection.py                # CRD conflict detection tests
+    ├── test_gpu_model_validation.py         # GPU model validation tests
+    ├── test_command_injection_protection.py # Security tests
+    ├── test_extraction.py                   # Requirement extraction tests
+    ├── test_usage_tracking.py               # Resource usage tracking tests
+    ├── failed_attempt.md                    # Test documentation
+    └── successful_attempt.md                # Test documentation
 ```
-
-## MCP Tool: `analyze_app_requirements`
-
-### Parameters
-- `repo_url` (string): Full GitHub or GitLab repository URL
-
-### Returns
-```json
-{
-  "success": true,
-  "repo_info": {
-    "url": "https://github.com/owner/repo",
-    "platform": "github",
-    "owner": "owner",
-    "repo": "repo"
-  },
-  "readme_content": "# Application...",
-  "deployment_files": [
-    {
-      "path": "helm/values.yaml",
-      "content": "...",
-      "parsed_resources": {
-        "cpu_requests": "4",
-        "memory_requests": "8Gi",
-        "gpu_requests": {"nvidia.com/gpu": "1"},
-        "gpu_model": "A100",
-        "gpu_memory": "80Gi"
-      }
-    }
-  ],
-  "yaml_extracted_requirements": {
-    "hardware": {
-      "cpu": "4",
-      "memory": "8Gi",
-      "gpu": {"nvidia.com/gpu": "1", "model": "A100", "memory": "80Gi"},
-      "storage": ["100Gi"]
-    },
-    "node_requirements": {
-      "node_selector": {"disktype": "ssd"}
-    },
-    "software_inferred": ["NVIDIA GPU Operator"],
-    "required_crds": [
-      {
-        "name": "workflows.argoproj.io",
-        "group": "argoproj.io",
-        "versions": ["v1alpha1"],
-        "source": "deployment_manifest"
-      }
-    ]
-  },
-  "cluster_info": {
-    "nodes": {
-      "total_nodes": 3,
-      "total_cpu": "12",
-      "total_memory": "48Gi",
-      "allocatable_cpu": "11400m",
-      "allocatable_memory": "45Gi",
-      "available_cpu": "3900m",
-      "available_memory": "21Gi",
-      "cpu_usage_percent": 65.8,
-      "memory_usage_percent": 53.3
-    },
-    "gpu_resources": {
-      "total_gpus": 4,
-      "gpu_types": {"nvidia.com/gpu": 4},
-      "gpu_models": ["NVIDIA-A100-SXM4-40GB"],
-      "gpu_memory_mb": 40960,
-      "nodes_with_gpu": ["gpu-node-1", "gpu-node-2"]
-    },
-    "storage_classes": [
-      {"name": "gp2", "provisioner": "kubernetes.io/aws-ebs", "is_default": true}
-    ],
-    "operators": ["nvidia-gpu-operator.v1.11.0"],
-    "crds": [
-      {
-        "name": "clusterpolicies.nvidia.com",
-        "group": "nvidia.com",
-        "versions": ["v1"],
-        "owner": "nvidia-gpu-operator"
-      }
-    ]
-  },
-  "feasibility_check": {
-    "is_feasible": true,
-    "confidence": "high",
-    "reasons_pass": [
-      "CPU: Cluster has 3900m available (11400m allocatable, 7500m used), requires 4000m",
-      "Memory: Cluster has 21Gi available (45Gi allocatable, 24Gi used), requires 8Gi",
-      "GPU: Cluster has 4 compatible GPU(s) - matches required model a100 (found: NVIDIA-A100-SXM4-40GB)",
-      "CRD: workflows.argoproj.io (v1alpha1) - Will be created (safe)"
-    ],
-    "reasons_fail": [],
-    "warnings": []
-  }
-}
-```
-
-## GPU Validation
-
-The system validates GPU **quantity**, **model/class**, and **memory (VRAM)**:
-
-### Supported Patterns
-
-1. **Datacenter-class**: `"datacenter-class"`, `"training-class"`, `"enterprise"`
-   - ✅ Accepts: A100, H100, H200, L4, L40/L40s, A30, A40, A10, V100, P100, MI250, MI300
-   - ❌ Rejects: T4, RTX series, GTX series, Quadro, Titan
-
-2. **Specific Models**: `"A100"`, `"H100"`, `"MI250"`
-   - Exact substring match in GPU model name
-
-3. **Multiple Options**: `"A100/L4"`, `"H100, H200, A100"`
-   - Accepts any of the specified models
-
-4. **Hierarchy**: `"A100 or newer"`, `"MI250 or better"`
-   - NVIDIA: H200 > H100 > A100/A40 > A30/A10 > V100 > P100 > L40s/L40 > L4
-   - AMD: MI300 > MI250 > MI210 > MI100
-
-5. **GPU Memory**: `"24Gi"`, `"80GB"`, `"32Gi"`
-   - Validates GPU VRAM against cluster GPU memory
-   - Critical for LLM workloads (Llama-70B needs 80GB, DeepSeek-V3 needs 600GB+)
-   - Clear error messages when insufficient
-
-### Example Model Validation
-
-| Requirement | Available GPU | Result |
-|-------------|---------------|--------|
-| Datacenter-class | A100 | ✅ PASS |
-| Datacenter-class | T4 | ❌ FAIL (T4 not datacenter-class) |
-| A100 or newer | H100 | ✅ PASS (H100 newer than A100) |
-| H100/H200/A100 | RTX 4090 | ❌ FAIL (consumer GPU) |
-
-### Example Memory Validation
-
-| Required Memory | Available Memory | Result |
-|----------------|------------------|--------|
-| 16Gi | A10G (24GB) | ✅ PASS |
-| 80Gi | A100-40GB (40GB) | ❌ FAIL (insufficient VRAM) |
-| 32Gi | A100-80GB (80GB) | ✅ PASS |
-
-See [GPU_VALIDATION_SUMMARY.md](GPU_VALIDATION_SUMMARY.md) for detailed documentation.
-
-## CRD Conflict Detection
-
-The system checks for CRD conflicts before installation:
-
-### Conflict Types
-
-1. **Name Conflicts**: CRD already exists with same name
-2. **API Group Conflicts**: Same name but different API group
-3. **Version Mismatches**: Different versions may be incompatible
-4. **Ownership Tracking**: Shows which operator manages the CRD
-
-### Example Output
-
-```
-CRD: workflows.argoproj.io (v1alpha1) - Will be created (safe)
-CRD: clusterpolicies.nvidia.com - Already exists with compatible version (v1)
-  └─ Managed by: nvidia-gpu-operator
-CRD Warning: customresources.example.com - Version mismatch.
-  Existing: v1beta1, Required: v1
-```
-
-## Environment Variables
-
-- `GITHUB_TOKEN`: GitHub personal access token (optional but recommended)
-- `GITLAB_TOKEN`: GitLab personal access token (optional)
-
-Create tokens at:
-- GitHub: https://github.com/settings/tokens
-- GitLab: https://gitlab.com/-/profile/personal_access_tokens
-
-## Supported File Types
-
-The parser automatically detects and analyzes:
-- Helm charts (`values.yaml`, `Chart.yaml`)
-- Kubernetes manifests (`deployment.yaml`, `statefulset.yaml`, `daemonset.yaml`)
-- ConfigMaps (`configmap.yaml`)
-- Custom Resource Definitions (`*.crd.yaml`)
-- Kustomize files (`kustomization.yaml`)
-- Operators (`*.clusterserviceversion.yaml`)
 
 ## Example Queries for Claude/Cursor
 
@@ -497,17 +280,8 @@ Claude/Cursor will automatically:
 - `oc` (OpenShift CLI) or `kubectl` installed and in PATH
 - User logged in with read permissions
 
-### Metrics (Optional)
-- metrics-server installed for current usage tracking
-- Without metrics: feasibility checks use allocatable resources only
-- With metrics: feasibility checks use actually available resources
 
 ## Troubleshooting
-
-### Rate Limiting
-If you see `403 rate limit exceeded` errors:
-1. Create a GitHub personal access token
-2. Add it to `.env` file as `GITHUB_TOKEN`
 
 ### Cluster Not Available
 If cluster scanning fails:
@@ -532,27 +306,6 @@ If GPU models show as empty:
 3. Try running manually: `uv run python main.py`
 4. Use the MCP Inspector to debug: `npx @modelcontextprotocol/inspector uv run python main.py`
 
-## Recent Enhancements
-
-- [x] **GPU Memory Validation**: Validates GPU VRAM requirements (24GB vs 80GB)
-- [x] **Targeted Cluster Scanning**: 30-50% faster by only scanning needed resources
-- [x] **Optimized API Calls**: Eliminated duplicate kubectl/oc calls
-- [x] **Repository Restructure**: Organized into `src/cluster_analyzer/`, `src/cluster_checker/`, `src/requirements_extractor/`
-
-## Future Enhancements
-
-- [ ] Web scraping for documentation links (e.g., docs.nvidia.com)
-- [ ] Multi-node topology requirements (NVLink, GPU affinity)
-- [ ] TPU support (Google Cloud TPU v5e, etc.)
-- [ ] Pod distribution analysis across nodes
-- [ ] Network bandwidth requirements
-- [ ] Support for more git platforms (Bitbucket, Azure DevOps)
-- [ ] Cached cluster scan results with TTL (reduce repeated scans)
-- [ ] Recursive directory scanning for deep nested deployment files
-- [ ] Parallel manifest fetching (ThreadPoolExecutor/asyncio)
-- [ ] Externalize GPU hierarchy/metadata to JSON configuration
-- [ ] Platform version verification (OpenShift/K8s versions)
-- [ ] Resource summation vs. peak requirement analysis
 
 ## Contributing
 
