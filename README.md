@@ -2,8 +2,6 @@
 
 An MCP (Model Context Protocol) server that analyzes git repositories to extract application installation requirements and validates them against OpenShift/Kubernetes clusters.
 
-**Repository**: [https://github.com/Hadar301/mcp-openshift-installer-checker](https://github.com/Hadar301/mcp-openshift-installer-checker)
-
 ## Features
 
 ### 🔍 Repository Analysis
