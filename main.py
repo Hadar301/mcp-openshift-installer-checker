@@ -5,9 +5,12 @@ This MCP server analyzes git repositories to extract application requirements
 and helps determine if an application can be installed on an OpenShift/K8s cluster.
 """
 
+from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
 from src.requirements_extractor.extractor import RequirementsExtractor
+
+load_dotenv()
 
 # Initialize the MCP server
 mcp = FastMCP("openshift-installer-checker")
